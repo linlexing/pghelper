@@ -59,6 +59,7 @@ func (t *DBTable) BatchFill(callBack func(table *DBTable, eof bool) error, batch
 			if err != nil {
 				return err
 			}
+			fmt.Println("ineral row count:", t.DataTable.RowCount())
 			err = callBack(t, eof)
 			if err != nil {
 				return err
@@ -77,15 +78,24 @@ func (t *DBTable) FillByID(ids ...interface{}) (err error) {
 	return
 }
 func (t *DBTable) FillWhere(strWhere string, params ...interface{}) (err error) {
-	return t.Fill(fmt.Sprintf("SELECT %s from %s WHERE %s",
+	if strWhere != "" {
+		strWhere = "WHERE " + strWhere
+	}
+	return t.Fill(fmt.Sprintf("SELECT %s from %s %s",
 		strings.Join(t.ColumnNames(), ","), t.TableName, strWhere), params...)
 }
 func (t *DBTable) Count(strWhere string, params ...interface{}) (count int64, err error) {
-	err = t.dbhelp.QueryOne(fmt.Sprintf("SELECT COUNT(*) FROM %s where $s", t.TableName, strWhere), append(params, &count)...)
+	if strWhere != "" {
+		strWhere = "WHERE " + strWhere
+	}
+	err = t.dbhelp.QueryOne(fmt.Sprintf("SELECT COUNT(*) FROM %s %s", t.TableName, strWhere), append(params, &count)...)
 	return
 }
 func (t *DBTable) BatchFillWhere(callBack func(table *DBTable, eof bool) error, batchRow int64, strWhere string, params ...interface{}) (err error) {
-	return t.BatchFill(callBack, batchRow, fmt.Sprintf("SELECT %s from %s WHERE %s",
+	if strWhere != "" {
+		strWhere = "WHERE " + strWhere
+	}
+	return t.BatchFill(callBack, batchRow, fmt.Sprintf("SELECT %s from %s %s",
 		strings.Join(t.ColumnNames(), ","), t.TableName, strWhere), params...)
 }
 func (t *DBTable) Save() (rcount int64, result_err error) {

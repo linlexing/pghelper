@@ -280,7 +280,7 @@ func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64) (eof 
 	rowIndex := int64(0)
 	eof = true
 	for rows.Next() {
-		if maxRow <= 0 || rowIndex < maxRow {
+		if maxRow > 0 && rowIndex == maxRow {
 			eof = false
 			break
 		}
