@@ -1,6 +1,9 @@
 package pghelper
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -29,6 +32,10 @@ var (
 	regVarcharArray = regexp.MustCompile(`^character varying\((\d+)\)\[\]$`)
 )
 
+type PGValue interface {
+	String() string
+	Parse(value string)
+}
 type PGTypeType int
 type PGType struct {
 	Type    PGTypeType
@@ -159,39 +166,6 @@ func (p *PGType) ReflectType() reflect.Type {
 	}
 }
 
-/*func DecodeReflectType(t reflect.Type) *PGType {
-	result := &PGType{}
-	if typeIsBool(t) {
-		result.Type = TypeBool
-	} else if typeIsBoolArray(t) {
-		result.Type = TypeBoolSlice
-	} else if typeIsBytea(t) {
-		result.Type = TypeBytea
-	} else if typeIsFloat64(t) {
-		result.Type = TypeFloat64
-	} else if typeIsFloat64Array(t) {
-		result.Type = TypeFloat64Slice
-	} else if typeIsInt64(t) {
-		result.Type = TypeInt64
-	} else if typeIsInt64Array(t) {
-		result.Type = TypeInt64Slice
-	} else if typeIsString(t) {
-		result.Type = TypeString
-	} else if typeIsStringArray(t) {
-		result.Type = TypeStringSlice
-	} else if typeIsTime(t) {
-		result.Type = TypeTime
-	} else if typeIsTimeArray(t) {
-		result.Type = TypeTimeSlice
-	} else if typeIsJSON(t) {
-		result.Type = TypeJSON
-	} else if typeIsJSONArray(t) {
-		result.Type = TypeJSONSlice
-	} else {
-		panic(ERROR_DataTypeInvalid(t))
-	}
-	return result
-}*/
 func (p *PGType) SetReflectType(value interface{}) error {
 	switch value.(type) {
 	case string:
@@ -262,53 +236,320 @@ func (p *PGType) SetDBType(t string) error {
 		return ERROR_DataTypeInvalid(t)
 	}
 	return nil
-} /*
-func typeIsStringArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsString(t.Elem())
 }
-func typeIsInt64Array(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsInt64(t.Elem())
-}
-func typeIsFloat64Array(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsFloat64(t.Elem())
-}
-func typeIsBoolArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsBool(t.Elem())
-}
-func typeIsTimeArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsTime(t.Elem())
-}
-func typeIsByteaArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && typeIsBytea(t.Elem())
-}
-func typeIsBool(t reflect.Type) bool {
-	return t.Kind() == reflect.Bool
-}
-func typeIsJSON(t reflect.Type) bool {
-	return t.Kind() == reflect.Map &&
-		t.Key().Kind() == reflect.String &&
-		t.Elem().Kind() == reflect.Interface
-}
-func typeIsJSONArray(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice &&
-		t.Elem().Kind() == reflect.Map &&
-		t.Elem().Key().Kind() == reflect.String &&
-		t.Elem().Elem().Kind() == reflect.Interface
-}
+func encodeString(dataType *PGType, value interface{}) (string, error) {
+	switch nullV := value.(type) {
+	case IsNull:
+		if nullV.IsNull() {
+			return "", nil
+		}
+	}
+	switch dataType.Type {
+	case TypeString:
+		if value.(string) == "" {
+			return "", nil
+		}
+		return value.(string), nil
+	case TypeBool:
+		if value.(bool) {
+			return "t", nil
+		} else {
+			return "f", nil
+		}
 
-func typeIsBytea(t reflect.Type) bool {
-	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
+	case TypeInt64:
+		return fmt.Sprint(value.(int64)), nil
+	case TypeFloat64:
+		return fmt.Sprintf("%.17f", value.(float64)), nil
+	case TypeTime:
+		return value.(time.Time).Format(time.RFC3339Nano), nil
+	case TypeBytea:
+		if len(value.(Bytea)) == 0 {
+			return "", nil
+		}
+		return fmt.Sprintf("\\x%x", value), nil
+	case TypeStringSlice:
+		if len(value.(StringSlice)) == 0 {
+			return "", nil
+		}
+		return encodePGArray(value.(StringSlice)), nil
+
+	case TypeBoolSlice:
+		if len(value.(BoolSlice)) == 0 {
+			return "", nil
+		}
+		tmpv := make([]string, len(value.(BoolSlice)))
+		for i, v := range value.(BoolSlice) {
+			if v {
+				tmpv[i] = "t"
+			} else {
+				tmpv[i] = "f"
+			}
+		}
+		return encodePGArray(tmpv), nil
+	case TypeInt64Slice:
+		if len(value.(Int64Slice)) == 0 {
+			return "", nil
+		}
+		tmpv := make([]string, len(value.(Int64Slice)))
+		for i, v := range value.(Int64Slice) {
+			tmpv[i] = fmt.Sprint(v)
+		}
+		return encodePGArray(tmpv), nil
+	case TypeFloat64Slice:
+		if len(value.(Float64Slice)) == 0 {
+			return "", nil
+		}
+		tmpv := make([]string, len(value.(Float64Slice)))
+		for i, v := range value.(Float64Slice) {
+			tmpv[i] = fmt.Sprint(v)
+		}
+		return encodePGArray(tmpv), nil
+
+	case TypeTimeSlice:
+		if len(value.(TimeSlice)) == 0 {
+			return "", nil
+		}
+		tmpv := make([]string, len(value.(TimeSlice)))
+		for i, v := range value.(TimeSlice) {
+			tmpv[i] = v.Format(time.RFC3339Nano)
+		}
+		return encodePGArray(tmpv), nil
+	case TypeJSON:
+		if len(value.(JSON)) == 0 {
+			return "", nil
+		}
+		buf, err := json.Marshal(value)
+		if err != nil {
+			return "", err
+		}
+		return string(buf), nil
+	case TypeJSONSlice:
+		if len(value.(JSONSlice)) == 0 {
+			return "", nil
+		}
+		rev := make([]string, len(value.(JSONSlice)))
+		for i, v := range value.(JSONSlice) {
+			bys, err := json.Marshal(v)
+			if err != nil {
+				return "", err
+			}
+			rev[i] = string(bys)
+		}
+		return encodePGArray(rev), nil
+	default:
+		return "", fmt.Errorf("invalid type %T", dataType)
+	}
+
 }
-func typeIsFloat64(t reflect.Type) bool {
-	return t.Kind() == reflect.Float64
+func decodeString(dataType *PGType, value string) (result interface{}, result_err error) {
+	if value == "" {
+		return nil, nil
+	}
+	switch dataType.Type {
+	case TypeString:
+		result = value
+	case TypeBool:
+		if string(value) == "t" {
+			result = true
+		} else {
+			result = false
+		}
+	case TypeInt64:
+		result, result_err = strconv.ParseInt(string(value), 10, 64)
+	case TypeFloat64:
+		result, result_err = strconv.ParseFloat(string(value), 64)
+	case TypeTime:
+		result, result_err = time.Parse(time.RFC3339Nano, string(value))
+	case TypeBytea:
+		if len(value) >= 2 && bytes.Equal([]byte(value)[:2], []byte("\\x")) {
+			// bytea_output = hex
+			s := []byte(value)[2:] // trim off leading "\\x"
+			rev := make(Bytea, hex.DecodedLen(len(s)))
+			_, result_err := hex.Decode(rev, s)
+			if result_err == nil {
+				result = rev
+			}
+		} else {
+			result_err = fmt.Errorf("%s is invalid hex string", value)
+		}
+	case TypeStringSlice:
+		result = parsePGArray(value)
+	case TypeBoolSlice:
+		tmp := parsePGArray(value)
+		rev := make(BoolSlice, len(tmp))
+		for i, tv := range tmp {
+			if tv == "t" {
+				rev[i] = true
+			} else {
+				rev[i] = false
+			}
+		}
+		result = rev
+	case TypeInt64Slice:
+		tmp := parsePGArray(value)
+		rev := make(Int64Slice, len(tmp))
+		for i, tv := range tmp {
+			ti, err := strconv.ParseInt(tv, 10, 64)
+			if err != nil {
+				result_err = err
+				break
+			}
+			rev[i] = ti
+		}
+		if result_err == nil {
+			result = rev
+		}
+	case TypeFloat64Slice:
+		tmp := parsePGArray(value)
+		rev := make(Float64Slice, len(tmp))
+		for i, tv := range tmp {
+			ti, err := strconv.ParseFloat(tv, 64)
+			if err != nil {
+				result_err = err
+				break
+			}
+			rev[i] = ti
+		}
+		if result_err == nil {
+			result = rev
+		}
+	case TypeTimeSlice:
+		tmp := parsePGArray(value)
+		rev := make(TimeSlice, len(tmp))
+		for i, tv := range tmp {
+			ti, err := time.Parse(time.RFC3339Nano, tv)
+			if err != nil {
+				result_err = err
+				break
+			}
+			rev[i] = ti
+		}
+		if result_err == nil {
+			result = rev
+		}
+	case TypeJSON:
+		rev := JSON{}
+		err := json.Unmarshal([]byte(value), &rev)
+		if err != nil {
+			result_err = err
+		} else {
+			result = rev
+		}
+	case TypeJSONSlice:
+		tmp := parsePGArray(value)
+		rev := make(JSONSlice, len(tmp))
+		for i, tv := range tmp {
+			ti := JSON{}
+			err := json.Unmarshal([]byte(tv), &ti)
+			if err != nil {
+				result_err = err
+				break
+			}
+			rev[i] = ti
+		}
+		if result_err == nil {
+			result = rev
+		}
+	default:
+		result_err = fmt.Errorf("invalid type %q", dataType)
+	}
+	if !dataType.NotNull {
+		switch dataType.Type {
+		case TypeString:
+			rev := NullString{}
+			if result != nil {
+				rev.Valid = true
+				rev.String = result.(string)
+			}
+			result = rev
+		case TypeBool:
+			rev := NullBool{}
+			if result != nil {
+				rev.Valid = true
+				rev.Bool = result.(bool)
+			}
+			result = rev
+		case TypeInt64:
+			rev := NullInt64{}
+			if result != nil {
+				rev.Valid = true
+				rev.Int64 = result.(int64)
+			}
+			result = rev
+		case TypeFloat64:
+			rev := NullFloat64{}
+			if result != nil {
+				rev.Valid = true
+				rev.Float64 = result.(float64)
+			}
+			result = rev
+		case TypeTime:
+			rev := NullTime{}
+			if result != nil {
+				rev.Valid = true
+				rev.Time = result.(time.Time)
+			}
+			result = rev
+		case TypeBytea:
+			rev := NullBytea{}
+			if result != nil {
+				rev.Valid = true
+				rev.Bytea = result.(Bytea)
+			}
+			result = rev
+		case TypeStringSlice:
+			rev := NullStringSlice{}
+
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(StringSlice)
+			}
+			result = rev
+		case TypeBoolSlice:
+			rev := NullBoolSlice{}
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(BoolSlice)
+			}
+			result = rev
+		case TypeInt64Slice:
+			rev := NullInt64Slice{}
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(Int64Slice)
+			}
+			result = rev
+		case TypeFloat64Slice:
+			rev := NullFloat64Slice{}
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(Float64Slice)
+			}
+			result = rev
+		case TypeTimeSlice:
+			rev := NullTimeSlice{}
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(TimeSlice)
+			}
+			result = rev
+		case TypeJSON:
+			rev := NullJSON{}
+			if result != nil {
+				rev.Valid = true
+				rev.Json = result.(JSON)
+			}
+			result = rev
+		case TypeJSONSlice:
+			rev := NullJSONSlice{}
+			if result != nil {
+				rev.Valid = true
+				rev.Slice = result.(JSONSlice)
+			}
+		default:
+			result_err = fmt.Errorf("invalid nullable type %v", dataType.Type)
+		}
+	}
+	return
 }
-func typeIsInt64(t reflect.Type) bool {
-	return t.Kind() == reflect.Int64
-}
-func typeIsString(t reflect.Type) bool {
-	return t.Kind() == reflect.String
-}
-func typeIsTime(t reflect.Type) bool {
-	return reflect.DeepEqual(t, reflect.TypeOf(time.Now()))
-}
-*/

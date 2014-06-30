@@ -251,7 +251,7 @@ func internalQueryBatchTx(tx *sql.Tx, callBack func(rows *sql.Rows) error, strSq
 	return
 }
 
-func internalRowsFillTable(rows *sql.Rows, table *DataTable) (err error) {
+func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64) (eof bool, err error) {
 	//先建立实际字段与扫描字段的顺序对应关系
 	var cols []string
 
@@ -274,10 +274,17 @@ func internalRowsFillTable(rows *sql.Rows, table *DataTable) (err error) {
 			}
 		}
 		if !bfound {
-			return ERROR_ColumnNotFound(tabColName)
+			return false, ERROR_ColumnNotFound(tabColName)
 		}
 	}
+	rowIndex := int64(0)
+	eof = true
 	for rows.Next() {
+		if maxRow <= 0 || rowIndex < maxRow {
+			eof = false
+			break
+		}
+		rowIndex++
 		tabVals := table.NewPtrValues()
 		//reorder vals
 		vals := make([]interface{}, len(tabVals))

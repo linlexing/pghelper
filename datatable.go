@@ -3,22 +3,60 @@ package pghelper
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/linlexing/datatable.go"
-
 	"reflect"
 	"strings"
 )
 
+type PGDesc map[string]interface{}
+
+func copyMap(src, dest map[string]interface{}) map[string]interface{} {
+	buf, err := json.Marshal(src)
+	if err != nil {
+		panic(err)
+	}
+	rev := map[string]interface{}{}
+	err = json.Unmarshal(buf, &rev)
+	if err != nil {
+		panic(err)
+	}
+	return rev
+}
+func (p PGDesc) Clone() PGDesc {
+	rev := PGDesc{}
+	return copyMap(p, rev)
+}
+func (p PGDesc) Equal(p1 PGDesc) bool {
+	if len(p) != len(p1) {
+		return false
+	}
+	return reflect.DeepEqual(p, p1)
+}
+func (p PGDesc) String() string {
+	buf, err := json.Marshal(p)
+	if err != nil {
+		panic(err)
+	}
+	return string(buf)
+}
+func (p PGDesc) Parse(str string) {
+	err := json.Unmarshal([]byte(str), &p)
+	if err != nil {
+		panic(err)
+	}
+}
+
 type Index struct {
 	Define string
-	Desc   string
+	Desc   PGDesc
 }
 
 func (i *Index) Clone() *Index {
 	return &Index{
 		Define: i.Define,
-		Desc:   i.Desc,
+		Desc:   i.Desc.Clone(),
 	}
 }
 
@@ -26,11 +64,11 @@ type DataTable struct {
 	*datatable.DataTable
 	Columns []*DataColumn
 	Indexes map[string]*Index
-	Desc    string
+	Desc    PGDesc
 }
 
 func NewIndex(define string) *Index {
-	return &Index{Define: define, Desc: ""}
+	return &Index{Define: define, Desc: PGDesc{}}
 }
 
 func NewDataTable(name string) *DataTable {
@@ -38,7 +76,7 @@ func NewDataTable(name string) *DataTable {
 		datatable.NewDataTable(name),
 		nil,
 		map[string]*Index{},
-		"",
+		PGDesc{},
 	}
 }
 func (d *DataTable) PrimaryKeys() []*DataColumn {
@@ -180,6 +218,10 @@ func (d *DataTable) getSequenceValues(r map[string]interface{}) []interface{} {
 func (d *DataTable) AddRow(r map[string]interface{}) error {
 	return d.AddValues(d.getSequenceValues(r)...)
 }
+func (d *DataTable) AddIndex(indexName string, index *Index) {
+	d.Indexes[indexName] = index
+}
+
 func (d *DataTable) NewRow() map[string]interface{} {
 	result := map[string]interface{}{}
 	for _, col := range d.Columns {

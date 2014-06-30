@@ -108,7 +108,7 @@ func TestPQPutToNullType(t *testing.T) {
 	}
 }
 func TestPQGetTable(t *testing.T) {
-	ahelp := NewPGHelp("host=localhost database=postgres user=meta password=meta123 sslmode=disable")
+	ahelp := NewPGHelper("host=localhost database=postgres user=meta password=meta123 sslmode=disable")
 	if tab, err := ahelp.GetDataTable("SELECT '{\"a\":1}'::jsonb as aa ,true as cc,cast(1212 as bigint) as bb, cast(b.nspname as text) as nspname,a.description ,now() as tt FROM pg_namespace b left join pg_description a on a.objoid = b.oid"); err != nil {
 		t.Error(err)
 	} else {
@@ -124,7 +124,7 @@ func TestPQGetTable(t *testing.T) {
 
 }
 func TestCreateTable(t *testing.T) {
-	ahelp := NewPGHelp("host=localhost database=postgres user=meta password=meta123 sslmode=disable")
+	ahelp := NewPGHelper("host=localhost database=postgres user=meta password=meta123 sslmode=disable")
 	if err := ahelp.ExecuteSql("create table version()"); err != nil {
 		t.Error(err)
 	} else {
@@ -133,7 +133,7 @@ func TestCreateTable(t *testing.T) {
 }
 func TestFillTableForArray(t *testing.T) {
 	dburl := "host=localhost database=postgres user=meta password=meta123 sslmode=disable"
-	ahelp := NewPGHelp(dburl)
+	ahelp := NewPGHelper(dburl)
 	tab := NewDataTable("tab")
 	tab.AddColumn(NewColumnT("c1", NewPGType(TypeStringSlice, 0, true), ""))
 	tab.AddColumn(NewColumn("c2", TypeInt64Slice, true))
@@ -148,7 +148,7 @@ func TestFillTableForArray(t *testing.T) {
 }
 func TestMarshalerJson(t *testing.T) {
 	dburl := "host=localhost database=postgres user=meta password=meta123 sslmode=disable"
-	ahelp := NewPGHelp(dburl)
+	ahelp := NewPGHelper(dburl)
 	tab, err := ahelp.Table("lx_check")
 	if err != nil {
 		t.Error(err)

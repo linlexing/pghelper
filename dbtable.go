@@ -3,13 +3,12 @@ package pghelper
 import (
 	"database/sql"
 	"fmt"
-	"github.com/linlexing/dbgo/oftenfun"
 	"strings"
 )
 
 type DBTable struct {
 	*DataTable
-	dbhelp *PGHelp
+	dbhelp *PGHelper
 }
 
 func valueToStringSlice(value []interface{}) StringSlice {
@@ -18,11 +17,11 @@ func valueToStringSlice(value []interface{}) StringSlice {
 	}
 	rev := make(StringSlice, len(value))
 	for i, v := range value {
-		rev[i] = oftenfun.SafeToString(v)
+		rev[i] = safeToString(v)
 	}
 	return rev
 }
-func NewDBTable(dbhelp *PGHelp, table *DataTable) *DBTable {
+func NewDBTable(dbhelp *PGHelper, table *DataTable) *DBTable {
 	return &DBTable{table, dbhelp}
 }
 func (t *DBTable) Fill(strSql string, params ...interface{}) (result_err error) {
@@ -37,8 +36,38 @@ func (t *DBTable) Fill(strSql string, params ...interface{}) (result_err error) 
 
 	}
 	result_err = t.dbhelp.Query(func(rows *sql.Rows) (err error) {
-		err = internalRowsFillTable(rows, t.DataTable)
+		_, err = internalRowsFillTable(rows, t.DataTable, 0)
 		return
+	}, strSql, vv...)
+	return
+}
+func (t *DBTable) BatchFill(callBack func(table *DBTable, eof bool) error, batchRow int64, strSql string, params ...interface{}) (result_err error) {
+	//convert params,every one type is []interface{},will to first element'type array
+	vv := make([]interface{}, len(params))
+	for i, v := range params {
+		if tv, ok := v.([]interface{}); ok {
+			vv[i] = valueToStringSlice(tv)
+		} else {
+			vv[i] = v
+		}
+
+	}
+	result_err = t.dbhelp.Query(func(rows *sql.Rows) error {
+		for {
+			t.Clear()
+			eof, err := internalRowsFillTable(rows, t.DataTable, batchRow)
+			if err != nil {
+				return err
+			}
+			err = callBack(t, eof)
+			if err != nil {
+				return err
+			}
+			if eof {
+				break
+			}
+		}
+		return nil
 	}, strSql, vv...)
 	return
 }
@@ -49,6 +78,14 @@ func (t *DBTable) FillByID(ids ...interface{}) (err error) {
 }
 func (t *DBTable) FillWhere(strWhere string, params ...interface{}) (err error) {
 	return t.Fill(fmt.Sprintf("SELECT %s from %s WHERE %s",
+		strings.Join(t.ColumnNames(), ","), t.TableName, strWhere), params...)
+}
+func (t *DBTable) Count(strWhere string, params ...interface{}) (count int64, err error) {
+	err = t.dbhelp.QueryOne(fmt.Sprintf("SELECT COUNT(*) FROM %s where $s", t.TableName, strWhere), append(params, &count)...)
+	return
+}
+func (t *DBTable) BatchFillWhere(callBack func(table *DBTable, eof bool) error, batchRow int64, strWhere string, params ...interface{}) (err error) {
+	return t.BatchFill(callBack, batchRow, fmt.Sprintf("SELECT %s from %s WHERE %s",
 		strings.Join(t.ColumnNames(), ","), t.TableName, strWhere), params...)
 }
 func (t *DBTable) Save() (rcount int64, result_err error) {

@@ -12,10 +12,13 @@ type IsNull interface {
 
 type DataColumn struct {
 	*datatable.DataColumn
-	OriginName string
-	PGType     *PGType
-	Default    string
-	Desc       string
+	PGType  *PGType
+	Default string
+	Desc    PGDesc
+}
+
+func (d *DataColumn) OriginName() string {
+	return safeToString(d.Desc["OriginName"])
 }
 
 func (d *DataColumn) Clone() *DataColumn {
@@ -27,10 +30,9 @@ func (d *DataColumn) Clone() *DataColumn {
 func NewColumnT(name string, dt *PGType, def string) *DataColumn {
 	return &DataColumn{
 		datatable.NewDataColumn(name, dt.ReflectType()),
-		"",
 		dt,
 		def,
-		"",
+		PGDesc{},
 	}
 
 }
@@ -51,4 +53,10 @@ func NewColumn(name string, dataType PGTypeType, param ...interface{}) *DataColu
 		panic("too much param")
 	}
 	return NewColumnT(name, dt, def)
+}
+func (d *DataColumn) String(value interface{}) (string, error) {
+	return encodeString(d.PGType, value)
+}
+func (d *DataColumn) Parse(value string) (interface{}, error) {
+	return decodeString(d.PGType, value)
 }

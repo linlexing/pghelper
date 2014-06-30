@@ -43,16 +43,16 @@ func NewSqlError(strSql string, err error, params ...interface{}) *SqlError {
 	}
 }
 
-type PGHelp struct {
+type PGHelper struct {
 	tx               *sql.Tx
 	connectionString string
 }
 
-func NewPGHelp(dburl string) *PGHelp {
-	return &PGHelp{connectionString: dburl}
+func NewPGHelper(dburl string) *PGHelper {
+	return &PGHelper{connectionString: dburl}
 }
-func RunAtTrans(dburl string, txFunc func(help *PGHelp) error) (result_err error) {
-	help := NewPGHelp(dburl)
+func RunAtTrans(dburl string, txFunc func(help *PGHelper) error) (result_err error) {
+	help := NewPGHelper(dburl)
 	var db *sql.DB
 	if db, result_err = sql.Open("postgres", dburl); result_err != nil {
 		return
@@ -85,7 +85,7 @@ func RunAtTrans(dburl string, txFunc func(help *PGHelp) error) (result_err error
 	return txFunc(help)
 }
 
-func (p *PGHelp) Schema() (*PGSchema, error) {
+func (p *PGHelper) Schema() (*PGSchema, error) {
 	//获取当前用户默认的schema信息
 	if tab, err := p.GetDataTable(SQL_GetCurrentSchemaAndDesc); err != nil {
 		return nil, err
@@ -99,10 +99,10 @@ func (p *PGHelp) Schema() (*PGSchema, error) {
 
 }
 
-func (p *PGHelp) DbUrl() string {
+func (p *PGHelper) DbUrl() string {
 	return p.connectionString
 }
-func (p *PGHelp) GetDataTable(strSql string, params ...interface{}) (table *DataTable, result_err error) {
+func (p *PGHelper) GetDataTable(strSql string, params ...interface{}) (table *DataTable, result_err error) {
 	result_err = p.Query(func(rows *sql.Rows) (err error) {
 		table, err = internalRows2DataTable(rows)
 		return
@@ -117,11 +117,11 @@ func decodePQDesc(descStr string) map[string]interface{} {
 	return desc
 
 }
-func (p *PGHelp) QueryOne(strSql string, params ...interface{}) (result_err error) {
+func (p *PGHelper) QueryOne(strSql string, params ...interface{}) (result_err error) {
 	result_err = p.QueryRow(strSql, params[:len(params)-1], params[len(params)-1])
 	return
 }
-func (p *PGHelp) QueryRow(strSql string, params []interface{}, dest ...interface{}) (result_err error) {
+func (p *PGHelper) QueryRow(strSql string, params []interface{}, dest ...interface{}) (result_err error) {
 	return p.Query(func(rows *sql.Rows) error {
 		if !rows.Next() {
 			return ERROR_NoRecord
@@ -133,7 +133,7 @@ func (p *PGHelp) QueryRow(strSql string, params []interface{}, dest ...interface
 	}, strSql, params...)
 
 }
-func (p *PGHelp) Query(callBack func(rows *sql.Rows) error, strSql string, params ...interface{}) (result_err error) {
+func (p *PGHelper) Query(callBack func(rows *sql.Rows) error, strSql string, params ...interface{}) (result_err error) {
 	defer func() {
 		if result_err != nil {
 			result_err = NewSqlError(strSql, result_err, params...)
@@ -146,7 +146,7 @@ func (p *PGHelp) Query(callBack func(rows *sql.Rows) error, strSql string, param
 	}
 	return
 }
-func (p *PGHelp) QueryBatch(callBack func(rows *sql.Rows) error, strSql string, params ...[]interface{}) (result_err error) {
+func (p *PGHelper) QueryBatch(callBack func(rows *sql.Rows) error, strSql string, params ...[]interface{}) (result_err error) {
 	defer func() {
 		if result_err != nil {
 			ps := make([]interface{}, len(params))
@@ -164,7 +164,7 @@ func (p *PGHelp) QueryBatch(callBack func(rows *sql.Rows) error, strSql string, 
 	return
 }
 
-func (p *PGHelp) GetString(strSQL string, params ...interface{}) string {
+func (p *PGHelper) GetString(strSQL string, params ...interface{}) string {
 	v := sql.NullString{}
 	if err := p.QueryOne(strSQL, append(params, &v)...); err != nil {
 		return ""
@@ -172,10 +172,10 @@ func (p *PGHelp) GetString(strSQL string, params ...interface{}) string {
 		return v.String
 	}
 }
-func (p *PGHelp) GetInt(strSQL string, params ...interface{}) int {
+func (p *PGHelper) GetInt(strSQL string, params ...interface{}) int {
 	return int(p.GetInt64(strSQL, params))
 }
-func (p *PGHelp) GetInt64(strSQL string, params ...interface{}) int64 {
+func (p *PGHelper) GetInt64(strSQL string, params ...interface{}) int64 {
 	v := sql.NullInt64{}
 	if err := p.QueryOne(strSQL, append(params, &v)...); err != nil {
 		return 0
@@ -183,7 +183,7 @@ func (p *PGHelp) GetInt64(strSQL string, params ...interface{}) int64 {
 		return v.Int64
 	}
 }
-func (p *PGHelp) GetBool(strSQL string, params ...interface{}) bool {
+func (p *PGHelper) GetBool(strSQL string, params ...interface{}) bool {
 	v := sql.NullBool{}
 	if err := p.QueryOne(strSQL, append(params, &v)...); err != nil {
 		return false
@@ -191,19 +191,26 @@ func (p *PGHelp) GetBool(strSQL string, params ...interface{}) bool {
 		return v.Bool
 	}
 }
-func (p *PGHelp) getTableDesc(tname string) string {
-	return p.GetString(SQL_GetTableDesc, tname)
+func (p *PGHelper) getTableDesc(tname string) PGDesc {
+	str := p.GetString(SQL_GetTableDesc, tname)
+	rev := PGDesc{}
+	if str == "" {
+		return rev
+	} else {
+		rev.Parse(str)
+	}
+	return rev
 }
-func (p *PGHelp) alterTableDesc(tname string, desc string) error {
+func (p *PGHelper) alterTableDesc(tname string, desc PGDesc) error {
 
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterTableDesc, tname, pqSignStr(desc)))
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterTableDesc, tname, pqSignStr(desc.String())))
 }
-func (p *PGHelp) TableExists(tablename string) bool {
+func (p *PGHelper) TableExists(tablename string) bool {
 	b := p.GetBool(SQL_TableExists, tablename)
 	return b
 }
 
-func (p *PGHelp) Table(tablename string) (*DBTable, error) {
+func (p *PGHelper) Table(tablename string) (*DBTable, error) {
 	result := NewDataTable(tablename)
 	if !p.TableExists(tablename) {
 		return nil, ERROR_NotFoundTable{tablename}
@@ -224,7 +231,7 @@ func (p *PGHelp) Table(tablename string) (*DBTable, error) {
 		}
 		dt.NotNull = oneRow["notnull"].(bool)
 		newColumn := NewColumnT(oneRow["columnname"].(string), &dt, safeToString(oneRow["def"]))
-		newColumn.Desc = safeToString(oneRow["desc"])
+		newColumn.Desc.Parse(safeToString(oneRow["desc"]))
 		result.AddColumn(newColumn)
 	}
 	//获取主键
@@ -245,16 +252,15 @@ func (p *PGHelp) Table(tablename string) (*DBTable, error) {
 	}
 	for i := 0; i < tIndexes.RowCount(); i++ {
 		oneRow := tIndexes.GetRow(i)
-		oneIndex := NewIndex(oneRow["indexname"].(string))
-		json.Unmarshal([]byte(oneRow["define"].(string)), oneIndex.Desc)
-		result.Indexes[oneRow["desc"].(string)] = oneIndex
-
+		oneIndex := NewIndex(oneRow["define"].(string))
+		oneIndex.Desc.Parse(safeToString(oneRow["desc"]))
+		result.AddIndex(oneRow["indexname"].(string), oneIndex)
 	}
 
 	return &DBTable{result, p}, nil
 }
 
-func (p *PGHelp) ExecuteSql(strSql string, params ...interface{}) (result_err error) {
+func (p *PGHelper) ExecuteSql(strSql string, params ...interface{}) (result_err error) {
 	defer func() {
 		if result_err != nil {
 			result_err = NewSqlError(strSql, result_err, params...)
@@ -267,7 +273,7 @@ func (p *PGHelp) ExecuteSql(strSql string, params ...interface{}) (result_err er
 	}
 	return
 }
-func (p *PGHelp) ExecuteBatch(strSql string, params ...[]interface{}) (result_err error) {
+func (p *PGHelper) ExecuteBatch(strSql string, params ...[]interface{}) (result_err error) {
 	defer func() {
 		if result_err != nil {
 			ps := make([]interface{}, len(params))
@@ -284,7 +290,7 @@ func (p *PGHelp) ExecuteBatch(strSql string, params ...[]interface{}) (result_er
 	}
 	return
 }
-func (p *PGHelp) GetDataTableBatch(strSql string, params ...[]interface{}) (table *DataTable, result_err error) {
+func (p *PGHelper) GetDataTableBatch(strSql string, params ...[]interface{}) (table *DataTable, result_err error) {
 	result_err = p.QueryBatch(func(rows *sql.Rows) (err error) {
 		if table == nil {
 			table, result_err = internalRows2DataTable(rows)
@@ -292,7 +298,7 @@ func (p *PGHelp) GetDataTableBatch(strSql string, params ...[]interface{}) (tabl
 				return
 			}
 		} else {
-			result_err = internalRowsFillTable(rows, table)
+			_, result_err = internalRowsFillTable(rows, table, 0)
 			if result_err != nil {
 				return
 			}
@@ -301,35 +307,35 @@ func (p *PGHelp) GetDataTableBatch(strSql string, params ...[]interface{}) (tabl
 	}, strSql, params...)
 	return
 }
-func (p *PGHelp) alterColumnDesc(tname, cname string, desc string) error {
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnDesc, tname, cname, pqSignStr(desc)))
+func (p *PGHelper) alterColumnDesc(tname, cname string, desc PGDesc) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnDesc, tname, cname, pqSignStr(desc.String())))
 }
-func (p *PGHelp) dropConstraint(tname, cname string) error {
+func (p *PGHelper) dropConstraint(tname, cname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropConstraint, tname, cname))
 }
-func (p *PGHelp) createColumn(tname, cname string, dt *PGType, def string) error {
+func (p *PGHelper) createColumn(tname, cname string, dt *PGType, def string) error {
 	defstr := ""
 	if len(def) > 0 {
 		defstr = "DEFAULT " + def
 	}
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreateColumn, tname, cname, dt.DBString(), defstr))
 }
-func (p *PGHelp) createTable(tname string) error {
+func (p *PGHelper) createTable(tname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreateTable, tname))
 }
-func (p *PGHelp) alterIndexDesc(name string, desc string) error {
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterIndexDesc, name, pqSignStr(desc)))
+func (p *PGHelper) alterIndexDesc(name string, desc PGDesc) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterIndexDesc, name, pqSignStr(desc.String())))
 }
-func (p *PGHelp) createPrimaryKey(tname string, cname []string) error {
+func (p *PGHelper) createPrimaryKey(tname string, cname []string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreatePrimaryKey, tname, strings.Join(cname, ",")))
 }
-func (p *PGHelp) renameColumn(tname, oldName, newName string) error {
+func (p *PGHelper) renameColumn(tname, oldName, newName string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_RenameColumn, tname, oldName, newName))
 }
-func (p *PGHelp) dropIndex(name string) error {
+func (p *PGHelper) dropIndex(name string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropIndex, name))
 }
-func (p *PGHelp) dropColumns(tname string, columns ...string) error {
+func (p *PGHelper) dropColumns(tname string, columns ...string) error {
 	for _, v := range columns {
 		if err := p.ExecuteSql(fmt.Sprintf(SQL_DropColumn, tname, v)); err != nil {
 			return err
@@ -338,36 +344,29 @@ func (p *PGHelp) dropColumns(tname string, columns ...string) error {
 	return nil
 }
 
-func (p *PGHelp) alterColumnType(tname, cname string, dt *PGType) error {
+func (p *PGHelper) alterColumnType(tname, cname string, dt *PGType) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnType, tname, cname, dt.DBString()))
 }
-func (p *PGHelp) dropColumnNotNull(tname, cname string) error {
+func (p *PGHelper) dropColumnNotNull(tname, cname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropColumnNotNull, tname, cname))
 }
-func (p *PGHelp) setColumnNotNull(tname, cname string) error {
+func (p *PGHelper) setColumnNotNull(tname, cname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_SetColumnNotNull, tname, cname))
 }
-func (p *PGHelp) dropColumnDefault(tname, cname string) error {
+func (p *PGHelper) dropColumnDefault(tname, cname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropColumnDefault, tname, cname))
 }
-func (p *PGHelp) setColumnDefault(tname, cname, def string) error {
+func (p *PGHelper) setColumnDefault(tname, cname, def string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_SetColumnDefault, tname, cname, def))
 }
-func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
+func (p *PGHelper) UpdateStruct(oldStruct, newStruct *DataTable) error {
 	if len(newStruct.TableName) == 0 {
 		return ERROR_TableNameIsEmpty
 	}
 	tablename := newStruct.TableName
-	var oldStruct *DataTable
-	if tab, err := p.Table(tablename); err != nil {
-		//如果表不存在，则创建空表
-		if _, ok := err.(ERROR_NotFoundTable); !ok {
-			return err
-		} else {
-			p.createTable(newStruct.TableName)
-		}
-	} else {
-		oldStruct = tab.DataTable
+	if oldStruct == nil {
+		p.createTable(newStruct.TableName)
+		oldStruct = NewDataTable(tablename)
 	}
 	//首先判断主关键字是否有变化
 	bKeyChange := false
@@ -406,8 +405,8 @@ func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
 	for _, vNew := range newColumns {
 		trueNewName := vNew.Name
 
-		if vNew.OriginName != "" && vNew.Name != vNew.OriginName {
-			trueNewName = vNew.OriginName
+		if vNew.OriginName() != "" && vNew.Name != vNew.OriginName() {
+			trueNewName = vNew.OriginName()
 		}
 		for _, vOld := range oldColumns {
 			if vOld.Name == trueNewName {
@@ -472,7 +471,7 @@ func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
 			}
 		}
 		//改描述
-		if column.NewColumn.Desc != column.OldColumn.Desc {
+		if !column.NewColumn.Desc.Equal(column.OldColumn.Desc) {
 			if err := p.alterColumnDesc(tablename, column.NewColumn.Name, column.NewColumn.Desc); err != nil {
 				return err
 			}
@@ -492,7 +491,7 @@ func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
 				return err
 			}
 			//有必要就加描述
-			if newColumn.Desc != "" {
+			if len(newColumn.Desc) > 0 {
 				if err := p.alterColumnDesc(tablename, newColumn.Name, newColumn.Desc); err != nil {
 					return err
 				}
@@ -517,7 +516,7 @@ func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
 					return err
 				}
 			}
-			if oldIdx.Desc != newIdx.Desc {
+			if !oldIdx.Desc.Equal(newIdx.Desc) {
 				if err := p.alterIndexDesc(idxName, newIdx.Desc); err != nil {
 					return err
 				}
@@ -540,7 +539,7 @@ func (p *PGHelp) UpdateStruct(newStruct *DataTable) error {
 		}
 	}
 	//处理表的描述
-	if oldStruct.Desc != newStruct.Desc {
+	if !oldStruct.Desc.Equal(newStruct.Desc) {
 		if err := p.alterTableDesc(newStruct.TableName, newStruct.Desc); err != nil {
 			return err
 		}
