@@ -383,7 +383,7 @@ func (dataType *PGType) DecodeString(value string) (result interface{}, result_e
 			result_err = fmt.Errorf("%s is invalid hex string", value)
 		}
 	case TypeStringSlice:
-		result = parsePGArray(value)
+		result = StringSlice(parsePGArray(value))
 	case TypeBoolSlice:
 		tmp := parsePGArray(value)
 		rev := make(BoolSlice, len(tmp))

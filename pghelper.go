@@ -261,6 +261,9 @@ func (p *PGHelper) Table(tablename string) (*DBTable, error) {
 }
 
 func (p *PGHelper) ExecuteSql(strSql string, params ...interface{}) (result_err error) {
+	if strings.Trim(strSql, " \t\n\r") == "" {
+		return nil
+	}
 	defer func() {
 		if result_err != nil {
 			result_err = NewSqlError(strSql, result_err, params...)
@@ -323,6 +326,9 @@ func (p *PGHelper) createColumn(tname, cname string, dt *PGType, def string) err
 func (p *PGHelper) createTable(tname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreateTable, tname))
 }
+func (p *PGHelper) createTempTable(tname string) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_CreateTempTable, tname))
+}
 func (p *PGHelper) alterIndexDesc(name string, desc PGDesc) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_AlterIndexDesc, name, pqSignStr(desc.String())))
 }
@@ -365,20 +371,25 @@ func (p *PGHelper) UpdateStruct(oldStruct, newStruct *DataTable) error {
 	}
 	tablename := newStruct.TableName
 	if oldStruct == nil {
-		p.createTable(newStruct.TableName)
+		if newStruct.Temp {
+			p.createTempTable(newStruct.TableName)
+
+		} else {
+			p.createTable(newStruct.TableName)
+		}
 		oldStruct = NewDataTable(tablename)
 	}
 	//首先判断主关键字是否有变化
 	bKeyChange := false
-	if !reflect.DeepEqual(oldStruct.GetPK(), newStruct.GetPK()) {
+	if !reflect.DeepEqual(oldStruct.PK, newStruct.PK) {
 		bKeyChange = true
 	}
 	if !bKeyChange {
 		//判断主键的数据类型是否变化
-		oldPks := oldStruct.PrimaryKeys()
-		newPks := newStruct.PrimaryKeys()
+		oldPks := oldStruct.PK
+		newPks := newStruct.PK
 		for i := 0; i < len(oldPks); i++ {
-			if !reflect.DeepEqual(oldPks[i].PGType, newPks[i].PGType) {
+			if !reflect.DeepEqual(oldStruct.Columns[oldStruct.ColumnIndex(oldPks[i])].PGType, newStruct.Columns[newStruct.ColumnIndex(newPks[i])].PGType) {
 				bKeyChange = true
 				break
 			}
@@ -500,7 +511,7 @@ func (p *PGHelper) UpdateStruct(oldStruct, newStruct *DataTable) error {
 	}
 	if bKeyChange && newStruct.HasPrimaryKey() {
 		//创建主键
-		if err := p.createPrimaryKey(tablename, newStruct.GetPK()); err != nil {
+		if err := p.createPrimaryKey(tablename, newStruct.PK); err != nil {
 			return err
 		}
 	}

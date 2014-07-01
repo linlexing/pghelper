@@ -64,6 +64,7 @@ type DataTable struct {
 	Columns []*DataColumn
 	Indexes map[string]*Index
 	Desc    PGDesc
+	Temp    bool `json:"-"`
 }
 
 func NewIndex(define string) *Index {
@@ -76,15 +77,8 @@ func NewDataTable(name string) *DataTable {
 		nil,
 		map[string]*Index{},
 		PGDesc{},
+		false,
 	}
-}
-func (d *DataTable) PrimaryKeys() []*DataColumn {
-	pks := d.DataTable.PrimaryKeys()
-	rev := make([]*DataColumn, len(pks))
-	for i, v := range pks {
-		rev[i] = d.Columns[v.Index()]
-	}
-	return rev
 }
 
 //Assign each column empty value pointer,General used by database/sql scan

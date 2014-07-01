@@ -388,16 +388,16 @@ func buildUpdateSql(table *DataTable) string {
 }
 func buildDeleteSql(table *DataTable) string {
 	params := []string{}
-	for i, c := range table.PrimaryKeys() {
-		params = append(params, fmt.Sprintf("%v = $%v", c.Name, i+1))
+	for i, c := range table.PK {
+		params = append(params, fmt.Sprintf("%v = $%v", c, i+1))
 	}
 	return fmt.Sprintf("DELETE %v WHERE %v", table.TableName, strings.Join(params, " AND "))
 
 }
 func buildSelectSql(table *DataTable) string {
 	params := []string{}
-	for i, c := range table.PrimaryKeys() {
-		params = append(params, fmt.Sprintf("%v = $%v", c.Name, i+1))
+	for i, c := range table.PK {
+		params = append(params, fmt.Sprintf("%v = $%v", c, i+1))
 	}
 	return fmt.Sprintf("SELECT %s from %s WHERE %v", strings.Join(table.ColumnNames(), ","), table.TableName, strings.Join(params, " AND "))
 

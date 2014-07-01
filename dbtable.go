@@ -59,7 +59,6 @@ func (t *DBTable) BatchFill(callBack func(table *DBTable, eof bool) error, batch
 			if err != nil {
 				return err
 			}
-			fmt.Println("ineral row count:", t.DataTable.RowCount())
 			err = callBack(t, eof)
 			if err != nil {
 				return err

@@ -66,6 +66,7 @@ const (
 	SQL_AlterColumnType   = "ALTER TABLE %v ALTER COLUMN %v TYPE %v"
 	SQL_CreateColumn      = "ALTER TABLE %v ADD COLUMN %v %v %v"
 	SQL_CreateTable       = "CREATE TABLE %v()"
+	SQL_CreateTempTable   = "CREATE TEMPORARY TABLE %v() ON COMMIT DROP"
 	SQL_DropIndex         = "DROP INDEX %v"
 	SQL_AlterColumnDesc   = "COMMENT ON COLUMN %v.%v IS %s"
 	SQL_AlterTableDesc    = "COMMENT ON TABLE %v IS %s"
