@@ -243,12 +243,6 @@ func (dataType *PGType) EncodeString(value interface{}) (string, error) {
 	if value == nil {
 		return "", nil
 	}
-	if !dataType.NotNull {
-		value = value.(PGNullValueGet).GetValue()
-		if value == nil {
-			return "", nil
-		}
-	}
 	switch dataType.Type {
 	case TypeString:
 		if value.(string) == "" {
@@ -468,11 +462,6 @@ func (dataType *PGType) DecodeString(value string) (result interface{}, result_e
 		}
 	default:
 		result_err = fmt.Errorf("invalid type %q", dataType)
-	}
-	if !dataType.NotNull {
-		ptrV := dataType.PtrZeroValue()
-		ptrV.(PGNullValueSet).SetValue(result)
-		result = reflect.ValueOf(ptrV).Elem().Interface()
 	}
 	return
 }
