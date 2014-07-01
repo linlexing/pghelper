@@ -12,11 +12,17 @@ type NullBool struct {
 
 // Scan implements the Scanner interface.
 func (n *NullBool) Scan(value interface{}) error {
-	newv := &sql.NullBool{}
-	if err := newv.Scan(value); err != nil {
-		return err
+	switch tv := value.(type) {
+	case NullBool:
+		*n = tv
+	default:
+
+		newv := &sql.NullBool{}
+		if err := newv.Scan(value); err != nil {
+			return err
+		}
+		n.Bool, n.Valid = newv.Bool, newv.Valid
 	}
-	n.Bool, n.Valid = newv.Bool, newv.Valid
 	return nil
 }
 
@@ -27,6 +33,19 @@ func (n NullBool) Value() (driver.Value, error) {
 	}
 	return n.Bool, nil
 }
-func (this NullBool) IsNull() bool {
-	return !this.Valid
+func (n NullBool) GetValue() interface{} {
+	if n.Valid {
+		return n.Bool
+	} else {
+		return nil
+	}
+}
+func (n *NullBool) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Bool = false
+	} else {
+		n.Valid = true
+		n.Bool = value.(bool)
+	}
 }

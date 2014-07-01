@@ -12,11 +12,16 @@ type NullString struct {
 
 // Scan implements the Scanner interface.
 func (ns *NullString) Scan(value interface{}) error {
-	newv := &sql.NullString{}
-	if err := newv.Scan(value); err != nil {
-		return err
+	switch tv := value.(type) {
+	case NullString:
+		*ns = tv
+	default:
+		newv := &sql.NullString{}
+		if err := newv.Scan(value); err != nil {
+			return err
+		}
+		ns.String, ns.Valid = newv.String, newv.Valid
 	}
-	ns.String, ns.Valid = newv.String, newv.Valid
 	return nil
 }
 
@@ -27,7 +32,19 @@ func (ns NullString) Value() (driver.Value, error) {
 	}
 	return ns.String, nil
 }
-
-func (this NullString) IsNull() bool {
-	return !this.Valid
+func (n NullString) GetValue() interface{} {
+	if n.Valid {
+		return n.String
+	} else {
+		return nil
+	}
+}
+func (n *NullString) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.String = ""
+	} else {
+		n.Valid = true
+		n.String = value.(string)
+	}
 }

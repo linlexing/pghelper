@@ -2,7 +2,6 @@ package pghelper
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -33,6 +32,12 @@ var (
 	regVarcharArray = regexp.MustCompile(`^character varying\((\d+)\)\[\]$`)
 )
 
+type PGNullValueGet interface {
+	GetValue() interface{}
+}
+type PGNullValueSet interface {
+	SetValue(value interface{})
+}
 type PGTypeType int
 type PGType struct {
 	Type    PGTypeType
@@ -239,14 +244,10 @@ func (dataType *PGType) EncodeString(value interface{}) (string, error) {
 		return "", nil
 	}
 	if !dataType.NotNull {
-		val, err := value.(driver.Valuer).Value()
-		if err != nil {
-			return "", err
-		}
-		if val == nil {
+		value = value.(PGNullValueGet).GetValue()
+		if value == nil {
 			return "", nil
 		}
-		value = val
 	}
 	switch dataType.Type {
 	case TypeString:
@@ -345,6 +346,16 @@ func (dataType *PGType) EncodeString(value interface{}) (string, error) {
 		return "", fmt.Errorf("invalid type %T", dataType)
 	}
 
+}
+
+//alloc empty value,return pointer the value
+func (p *PGType) PtrZeroValue() interface{} {
+	defer func() {
+		if f := recover(); f != nil {
+			panic(fmt.Sprintf("PGType:%v can't new ZeroValue", p))
+		}
+	}()
+	return reflect.New(p.ReflectType()).Interface()
 }
 func (dataType *PGType) DecodeString(value string) (result interface{}, result_err error) {
 	if value == "" {
@@ -459,101 +470,9 @@ func (dataType *PGType) DecodeString(value string) (result interface{}, result_e
 		result_err = fmt.Errorf("invalid type %q", dataType)
 	}
 	if !dataType.NotNull {
-		switch dataType.Type {
-		case TypeString:
-			rev := NullString{}
-			if result != nil {
-				rev.Valid = true
-				rev.String = result.(string)
-			}
-			result = rev
-		case TypeBool:
-			rev := NullBool{}
-			if result != nil {
-				rev.Valid = true
-				rev.Bool = result.(bool)
-			}
-			result = rev
-		case TypeInt64:
-			rev := NullInt64{}
-			if result != nil {
-				rev.Valid = true
-				rev.Int64 = result.(int64)
-			}
-			result = rev
-		case TypeFloat64:
-			rev := NullFloat64{}
-			if result != nil {
-				rev.Valid = true
-				rev.Float64 = result.(float64)
-			}
-			result = rev
-		case TypeTime:
-			rev := NullTime{}
-			if result != nil {
-				rev.Valid = true
-				rev.Time = result.(time.Time)
-			}
-			result = rev
-		case TypeBytea:
-			rev := NullBytea{}
-			if result != nil {
-				rev.Valid = true
-				rev.Bytea = result.(Bytea)
-			}
-			result = rev
-		case TypeStringSlice:
-			rev := NullStringSlice{}
-
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(StringSlice)
-			}
-			result = rev
-		case TypeBoolSlice:
-			rev := NullBoolSlice{}
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(BoolSlice)
-			}
-			result = rev
-		case TypeInt64Slice:
-			rev := NullInt64Slice{}
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(Int64Slice)
-			}
-			result = rev
-		case TypeFloat64Slice:
-			rev := NullFloat64Slice{}
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(Float64Slice)
-			}
-			result = rev
-		case TypeTimeSlice:
-			rev := NullTimeSlice{}
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(TimeSlice)
-			}
-			result = rev
-		case TypeJSON:
-			rev := NullJSON{}
-			if result != nil {
-				rev.Valid = true
-				rev.Json = result.(JSON)
-			}
-			result = rev
-		case TypeJSONSlice:
-			rev := NullJSONSlice{}
-			if result != nil {
-				rev.Valid = true
-				rev.Slice = result.(JSONSlice)
-			}
-		default:
-			result_err = fmt.Errorf("invalid nullable type %v", dataType.Type)
-		}
+		ptrV := dataType.PtrZeroValue()
+		ptrV.(PGNullValueSet).SetValue(result)
+		result = reflect.ValueOf(ptrV).Elem().Interface()
 	}
 	return
 }

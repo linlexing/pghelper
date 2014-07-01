@@ -66,6 +66,19 @@ func (f NullJSON) Value() (driver.Value, error) {
 		return f.Json.Value()
 	}
 }
-func (f NullJSON) IsNull() bool {
-	return !f.Valid
+func (n NullJSON) GetValue() interface{} {
+	if n.Valid {
+		return n.Json
+	} else {
+		return nil
+	}
+}
+func (n *NullJSON) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Json = nil
+	} else {
+		n.Valid = true
+		n.Json = value.(JSON)
+	}
 }

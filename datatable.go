@@ -166,11 +166,11 @@ func (d *DataTable) AsTabText(columns ...string) string {
 }
 
 func (d *DataTable) GetValue(rowIndex, colIndex int) interface{} {
-	tv, err := d.Columns[colIndex].Null2Nil(d.DataTable.GetValue(rowIndex, colIndex))
-	if err != nil {
-		panic(err)
+	if d.Columns[colIndex].PGType.NotNull {
+		return d.DataTable.GetValue(rowIndex, colIndex)
+	} else {
+		return d.DataTable.GetValue(rowIndex, colIndex).(PGNullValueGet).GetValue()
 	}
-	return tv
 }
 func (d *DataTable) GetColumnValues(columnIndex int) []interface{} {
 	newValues := make([]interface{}, d.RowCount())
@@ -187,26 +187,6 @@ func (d *DataTable) GetColumnStrings(columnIndex int) []string {
 	return rev
 }
 
-/*func (d *DataTable) nilToNULL(row []interface{}) ([]interface{}, error) {
-	rev := make([]interface{}, len(row))
-	for i, col := range d.Columns {
-		tmp := col.PtrZeroValue()
-		switch t := tmp.(type) {
-		case sql.Scanner:
-			err := t.Scan(row[i])
-			if err != nil {
-				return nil, fmt.Errorf("column:%q type is %#v ,value:%#v type is %T ,zero value %#v type is %T,error:%s", col.Name, col.PGType, row[i], row[i], tmp, tmp, err)
-			}
-			rev[i] = reflect.ValueOf(tmp).Elem().Interface()
-		default:
-			if row[i] == nil {
-				panic(fmt.Errorf("nil --> %s error", col.DataType.String()))
-			}
-			rev[i] = row[i]
-		}
-	}
-	return rev, nil
-}*/
 func (d *DataTable) getSequenceValues(r map[string]interface{}) []interface{} {
 	vals := make([]interface{}, d.ColumnCount())
 	for i, col := range d.Columns {
@@ -286,22 +266,24 @@ func (d *DataTable) AddColumn(col *DataColumn) *DataColumn {
 func (d *DataTable) nil2NULL(values []interface{}) ([]interface{}, error) {
 	rev := make([]interface{}, len(values))
 	for colIdx, col := range d.Columns {
-		tv, err := col.Nil2NULL(values[colIdx])
-		if err != nil {
-			return nil, err
+		if col.PGType.NotNull {
+			rev[colIdx] = values[colIdx]
+		} else {
+			tv := col.PtrZeroValue()
+			tv.(PGNullValueSet).SetValue(values[colIdx])
+			rev[colIdx] = reflect.ValueOf(tv).Elem().Interface()
 		}
-		rev[colIdx] = tv
 	}
 	return rev, nil
 }
 func (d *DataTable) null2Nil(values []interface{}) ([]interface{}, error) {
 	rev := make([]interface{}, len(values))
 	for colIdx, col := range d.Columns {
-		tv, err := col.Null2Nil(values[colIdx])
-		if err != nil {
-			return nil, err
+		if col.PGType.NotNull {
+			rev[colIdx] = values[colIdx]
+		} else {
+			rev[colIdx] = values[colIdx].(PGNullValueGet).GetValue()
 		}
-		rev[colIdx] = tv
 	}
 	return rev, nil
 }

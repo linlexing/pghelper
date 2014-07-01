@@ -83,6 +83,19 @@ func (f NullJSONSlice) Value() (driver.Value, error) {
 		return f.Slice.Value()
 	}
 }
-func (f NullJSONSlice) IsNull() bool {
-	return !f.Valid
+func (n NullJSONSlice) GetValue() interface{} {
+	if n.Valid {
+		return n.Slice
+	} else {
+		return nil
+	}
+}
+func (n *NullJSONSlice) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Slice = nil
+	} else {
+		n.Valid = true
+		n.Slice = value.(JSONSlice)
+	}
 }

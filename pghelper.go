@@ -298,7 +298,7 @@ func (p *PGHelper) GetDataTableBatch(strSql string, params ...[]interface{}) (ta
 				return
 			}
 		} else {
-			_, result_err = internalRowsFillTable(rows, table, 0)
+			_, result_err = internalRowsFillTable(rows, table, 0, false)
 			if result_err != nil {
 				return
 			}

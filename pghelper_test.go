@@ -24,7 +24,8 @@ func CreateTable() *DataTable {
 func Test_buildSql(t *testing.T) {
 	table := CreateTable()
 	table.AddValues("03", "name3", 0.003)
-	table.SetValues(0, "01", "name4", NullFloat64{Valid: true, Float64: 0.004})
+	table.SetValues(0, "01", "name4", 0.004)
+	table.SetValues(0, "01", "name4", nil)
 	table.DeleteRow(1)
 	fmt.Print("delete sql:\n", buildDeleteSql(table), "\ninsert sql:\n", buildInsertSql(table), "\nupdate sql:\n", buildUpdateSql(table))
 }

@@ -47,7 +47,19 @@ func (f NullBytea) Value() (driver.Value, error) {
 	}
 	return f.Bytea, nil
 }
-
-func (this NullBytea) IsNull() bool {
-	return !this.Valid
+func (n NullBytea) GetValue() interface{} {
+	if n.Valid {
+		return n.Bytea
+	} else {
+		return nil
+	}
+}
+func (n *NullBytea) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Bytea = nil
+	} else {
+		n.Valid = true
+		n.Bytea = value.(Bytea)
+	}
 }

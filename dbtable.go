@@ -36,7 +36,7 @@ func (t *DBTable) Fill(strSql string, params ...interface{}) (result_err error) 
 
 	}
 	result_err = t.dbhelp.Query(func(rows *sql.Rows) (err error) {
-		_, err = internalRowsFillTable(rows, t.DataTable, 0)
+		_, err = internalRowsFillTable(rows, t.DataTable, 0, false)
 		return
 	}, strSql, vv...)
 	return
@@ -55,7 +55,7 @@ func (t *DBTable) BatchFill(callBack func(table *DBTable, eof bool) error, batch
 	result_err = t.dbhelp.Query(func(rows *sql.Rows) error {
 		for {
 			t.Clear()
-			eof, err := internalRowsFillTable(rows, t.DataTable, batchRow)
+			eof, err := internalRowsFillTable(rows, t.DataTable, batchRow, false)
 			if err != nil {
 				return err
 			}

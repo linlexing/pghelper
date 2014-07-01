@@ -12,11 +12,17 @@ type NullInt64 struct {
 
 // Scan implements the Scanner interface.
 func (n *NullInt64) Scan(value interface{}) error {
-	newv := &sql.NullInt64{}
-	if err := newv.Scan(value); err != nil {
-		return err
+	switch tv := value.(type) {
+	case NullInt64:
+		*n = tv
+	default:
+
+		newv := &sql.NullInt64{}
+		if err := newv.Scan(value); err != nil {
+			return err
+		}
+		n.Int64, n.Valid = newv.Int64, newv.Valid
 	}
-	n.Int64, n.Valid = newv.Int64, newv.Valid
 	return nil
 }
 
@@ -27,7 +33,19 @@ func (n NullInt64) Value() (driver.Value, error) {
 	}
 	return n.Int64, nil
 }
-
-func (this NullInt64) IsNull() bool {
-	return !this.Valid
+func (n NullInt64) GetValue() interface{} {
+	if n.Valid {
+		return n.Int64
+	} else {
+		return nil
+	}
+}
+func (n *NullInt64) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Int64 = 0
+	} else {
+		n.Valid = true
+		n.Int64 = value.(int64)
+	}
 }

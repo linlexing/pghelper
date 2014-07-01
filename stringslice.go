@@ -57,6 +57,19 @@ func (f NullStringSlice) Value() (driver.Value, error) {
 		return f.Slice.Value()
 	}
 }
-func (f NullStringSlice) IsNull() bool {
-	return !f.Valid
+func (n NullStringSlice) GetValue() interface{} {
+	if n.Valid {
+		return n.Slice
+	} else {
+		return nil
+	}
+}
+func (n *NullStringSlice) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Slice = nil
+	} else {
+		n.Valid = true
+		n.Slice = value.(StringSlice)
+	}
 }

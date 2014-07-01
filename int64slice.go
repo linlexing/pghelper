@@ -71,6 +71,19 @@ func (f NullInt64Slice) Value() (driver.Value, error) {
 		return f.Slice.Value()
 	}
 }
-func (f NullInt64Slice) IsNull() bool {
-	return !f.Valid
+func (n NullInt64Slice) GetValue() interface{} {
+	if n.Valid {
+		return n.Slice
+	} else {
+		return nil
+	}
+}
+func (n *NullInt64Slice) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Slice = nil
+	} else {
+		n.Valid = true
+		n.Slice = value.(Int64Slice)
+	}
 }

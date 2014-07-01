@@ -10,18 +10,20 @@ type NullFloat64 struct {
 	Float64 float64
 }
 
-func (this NullFloat64) IsNull() bool {
-	return !this.Valid
-}
-
 // Scan implements the Scanner interface.
 func (n *NullFloat64) Scan(value interface{}) error {
-	newV := &sql.NullFloat64{}
-	err := newV.Scan(value)
-	if err != nil {
-		return err
+	switch tv := value.(type) {
+	case NullFloat64:
+		*n = tv
+	default:
+
+		newV := &sql.NullFloat64{}
+		err := newV.Scan(value)
+		if err != nil {
+			return err
+		}
+		n.Valid, n.Float64 = newV.Valid, newV.Float64
 	}
-	n.Valid, n.Float64 = newV.Valid, newV.Float64
 	return nil
 }
 
@@ -32,5 +34,19 @@ func (n NullFloat64) Value() (driver.Value, error) {
 	}
 	return n.Float64, nil
 }
-
-// NullBool represents a bool that ma
+func (n NullFloat64) GetValue() interface{} {
+	if n.Valid {
+		return n.Float64
+	} else {
+		return nil
+	}
+}
+func (n *NullFloat64) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Float64 = 0
+	} else {
+		n.Valid = true
+		n.Float64 = value.(float64)
+	}
+}

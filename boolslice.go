@@ -72,7 +72,19 @@ func (f NullBoolSlice) Value() (driver.Value, error) {
 		return f.Slice.Value()
 	}
 }
-func (f NullBoolSlice) IsNull() bool {
-	return !f.Valid
-
+func (n NullBoolSlice) GetValue() interface{} {
+	if n.Valid {
+		return n.Slice
+	} else {
+		return nil
+	}
+}
+func (n *NullBoolSlice) SetValue(value interface{}) {
+	if value == nil {
+		n.Valid = false
+		n.Slice = nil
+	} else {
+		n.Valid = true
+		n.Slice = value.(BoolSlice)
+	}
 }

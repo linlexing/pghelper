@@ -5,7 +5,6 @@ import (
 
 	"errors"
 	"fmt"
-	"github.com/linlexing/dbgo/oftenfun"
 	"reflect"
 	"strconv"
 	"strings"
@@ -251,7 +250,7 @@ func internalQueryBatchTx(tx *sql.Tx, callBack func(rows *sql.Rows) error, strSq
 	return
 }
 
-func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64) (eof bool, err error) {
+func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64, firstRead bool) (eof bool, err error) {
 	//先建立实际字段与扫描字段的顺序对应关系
 	var cols []string
 
@@ -279,7 +278,11 @@ func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64) (eof 
 	}
 	rowIndex := int64(0)
 	eof = true
-	for rows.Next() {
+	bNext := true
+	if !firstRead {
+		bNext = rows.Next()
+	}
+	for bNext {
 		if maxRow > 0 && rowIndex == maxRow {
 			eof = false
 			break
@@ -296,16 +299,17 @@ func internalRowsFillTable(rows *sql.Rows, table *DataTable, maxRow int64) (eof 
 		}
 		valsToAdd := make([]interface{}, len(vals))
 		for scanColIdx, tabColIdx := range trueIndex {
-			if vals[scanColIdx] == nil {
-				valsToAdd[tabColIdx] = nil
-			} else {
+			if table.Columns[tabColIdx].PGType.NotNull {
 				valsToAdd[tabColIdx] = reflect.ValueOf(vals[scanColIdx]).Elem().Interface()
+			} else {
+				valsToAdd[tabColIdx] = reflect.ValueOf(vals[scanColIdx]).Elem().Interface().(PGNullValueGet).GetValue()
 			}
 		}
 
 		if err = table.AddValues(valsToAdd...); err != nil {
 			return
 		}
+		bNext = rows.Next()
 	}
 	table.AcceptChange()
 	return
@@ -327,43 +331,29 @@ func autoCreateColumn(cname string, value interface{}) (*DataColumn, error) {
 func internalRows2DataTable(rows *sql.Rows) (*DataTable, error) {
 	result := NewDataTable("table1")
 	var err error
-	bFirst := true
-	for rows.Next() {
+	if rows.Next() {
 		var vals []interface{}
-		if bFirst {
-			bFirst = false
-
-			//创建表结构
-			var cols []string
-			if cols, err = rows.Columns(); err != nil {
-				return nil, err
-			}
-			if vals, err = scanValues(rows, len(cols)); err != nil {
-				return nil, err
-			}
-			for i, v := range vals {
-				col, err := autoCreateColumn(cols[i], v)
-				if err != nil {
-					return nil, err
-				}
-				result.AddColumn(col)
-			}
-		} else {
-			if vals, err = scanValues(rows, result.ColumnCount()); err != nil {
-				return nil, err
-			}
+		//创建表结构
+		var cols []string
+		if cols, err = rows.Columns(); err != nil {
+			return nil, err
 		}
-		for i := 0; i < result.ColumnCount(); i++ {
-			if _, ok := vals[i].(string); !ok && result.Columns[i].PGType.Type == TypeString {
-				vals[i] = oftenfun.SafeToString(vals[i])
-			}
+		if vals, err = scanValues(rows, len(cols)); err != nil {
+			return nil, err
 		}
-		if err := result.AddValues(vals...); err != nil {
+		for i, v := range vals {
+			col, err := autoCreateColumn(cols[i], v)
+			if err != nil {
+				return nil, err
+			}
+			result.AddColumn(col)
+		}
+		_, err := internalRowsFillTable(rows, result, 0, true)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	result.AcceptChange()
 	return result, err
 }
 func scanValues(r *sql.Rows, num int) ([]interface{}, error) {
