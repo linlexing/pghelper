@@ -354,7 +354,7 @@ func internalRows2DataTable(rows *sql.Rows) (*DataTable, error) {
 			}
 		}
 		for i := 0; i < result.ColumnCount(); i++ {
-			if _, ok := vals[i].(string); !ok && result.Columns[i].DataType.Kind() == reflect.String {
+			if _, ok := vals[i].(string); !ok && result.Columns[i].PGType.Type == TypeString {
 				vals[i] = oftenfun.SafeToString(vals[i])
 			}
 		}

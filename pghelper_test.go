@@ -24,7 +24,7 @@ func CreateTable() *DataTable {
 func Test_buildSql(t *testing.T) {
 	table := CreateTable()
 	table.AddValues("03", "name3", 0.003)
-	table.SetValues(0, "01", "name4", 0.004)
+	table.SetValues(0, "01", "name4", NullFloat64{Valid: true, Float64: 0.004})
 	table.DeleteRow(1)
 	fmt.Print("delete sql:\n", buildDeleteSql(table), "\ninsert sql:\n", buildInsertSql(table), "\nupdate sql:\n", buildUpdateSql(table))
 }
@@ -50,13 +50,7 @@ func TestPQScaleToInterface(t *testing.T) {
 		}
 	}
 }
-func TestConvert(t *testing.T) {
-	var v interface{}
-	v = NullBytea{}
-	if !v.(IsNull).IsNull() {
-		t.Error("error")
-	}
-}
+
 func TestPQScaleToNullType(t *testing.T) {
 	db, err := sql.Open("postgres", "host=localhost database=postgres user=meta password=meta123 sslmode=disable")
 	if err != nil {
@@ -144,6 +138,7 @@ func TestFillTableForArray(t *testing.T) {
 	if err := dbTab.Fill(`select '{"234","343a4"}'::text[] c1,'{123,11}'::bigint[] c2,'{"{\"a\":1,\"b\":\"334\"}","{\"a\":2,\"b\":\"aaa\"}"}'::jsonb[] c3,'{"a":1,"b":"333","c":{"c1":33.34}}'::jsonb c4`); err != nil {
 		t.Error(err)
 	}
+	fmt.Println(tab.GetRow(0)["c4"])
 	fmt.Println(dbTab.AsTabText())
 }
 func TestMarshalerJson(t *testing.T) {

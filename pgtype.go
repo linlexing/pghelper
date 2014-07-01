@@ -2,6 +2,7 @@ package pghelper
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -32,10 +33,6 @@ var (
 	regVarcharArray = regexp.MustCompile(`^character varying\((\d+)\)\[\]$`)
 )
 
-type PGValue interface {
-	String() string
-	Parse(value string)
-}
 type PGTypeType int
 type PGType struct {
 	Type    PGTypeType
@@ -237,12 +234,19 @@ func (p *PGType) SetDBType(t string) error {
 	}
 	return nil
 }
-func encodeString(dataType *PGType, value interface{}) (string, error) {
-	switch nullV := value.(type) {
-	case IsNull:
-		if nullV.IsNull() {
+func (dataType *PGType) EncodeString(value interface{}) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	if !dataType.NotNull {
+		val, err := value.(driver.Valuer).Value()
+		if err != nil {
+			return "", err
+		}
+		if val == nil {
 			return "", nil
 		}
+		value = val
 	}
 	switch dataType.Type {
 	case TypeString:
@@ -342,7 +346,7 @@ func encodeString(dataType *PGType, value interface{}) (string, error) {
 	}
 
 }
-func decodeString(dataType *PGType, value string) (result interface{}, result_err error) {
+func (dataType *PGType) DecodeString(value string) (result interface{}, result_err error) {
 	if value == "" {
 		return nil, nil
 	}

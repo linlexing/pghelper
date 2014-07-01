@@ -2,7 +2,6 @@
 package pghelper
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/linlexing/datatable.go"
@@ -111,7 +110,8 @@ func safeToString(s interface{}) string {
 	}
 
 }
-func nullToNil(value ...interface{}) []interface{} {
+
+/*func nullToNil(value ...interface{}) []interface{} {
 	rev := make([]interface{}, len(value))
 	for i, v := range value {
 		switch tv := v.(type) {
@@ -129,7 +129,7 @@ func nullToNil(value ...interface{}) []interface{} {
 		}
 	}
 	return rev
-}
+}*/
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
@@ -165,9 +165,12 @@ func (d *DataTable) AsTabText(columns ...string) string {
 	return strings.Join(result, "\n")
 }
 
-//convert NULL to nil
 func (d *DataTable) GetValue(rowIndex, colIndex int) interface{} {
-	return nullToNil(d.DataTable.GetValue(rowIndex, colIndex))[0]
+	tv, err := d.Columns[colIndex].Null2Nil(d.DataTable.GetValue(rowIndex, colIndex))
+	if err != nil {
+		panic(err)
+	}
+	return tv
 }
 func (d *DataTable) GetColumnValues(columnIndex int) []interface{} {
 	newValues := make([]interface{}, d.RowCount())
@@ -183,7 +186,8 @@ func (d *DataTable) GetColumnStrings(columnIndex int) []string {
 	}
 	return rev
 }
-func (d *DataTable) nilToNULL(row []interface{}) ([]interface{}, error) {
+
+/*func (d *DataTable) nilToNULL(row []interface{}) ([]interface{}, error) {
 	rev := make([]interface{}, len(row))
 	for i, col := range d.Columns {
 		tmp := col.PtrZeroValue()
@@ -191,7 +195,7 @@ func (d *DataTable) nilToNULL(row []interface{}) ([]interface{}, error) {
 		case sql.Scanner:
 			err := t.Scan(row[i])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("column:%q type is %#v ,value:%#v type is %T ,zero value %#v type is %T,error:%s", col.Name, col.PGType, row[i], row[i], tmp, tmp, err)
 			}
 			rev[i] = reflect.ValueOf(tmp).Elem().Interface()
 		default:
@@ -202,7 +206,7 @@ func (d *DataTable) nilToNULL(row []interface{}) ([]interface{}, error) {
 		}
 	}
 	return rev, nil
-}
+}*/
 func (d *DataTable) getSequenceValues(r map[string]interface{}) []interface{} {
 	vals := make([]interface{}, d.ColumnCount())
 	for i, col := range d.Columns {
@@ -225,7 +229,7 @@ func (d *DataTable) AddIndex(indexName string, index *Index) {
 func (d *DataTable) NewRow() map[string]interface{} {
 	result := map[string]interface{}{}
 	for _, col := range d.Columns {
-		result[col.Name] = nullToNil(col.ZeroValue())[0]
+		result[col.Name] = col.ZeroValue()
 	}
 	return result
 }
@@ -253,25 +257,51 @@ func (d *DataTable) UpdateRow(rowIndex int, r map[string]interface{}) error {
 	return d.SetValues(rowIndex, d.getSequenceValues(r)...)
 }
 func (d *DataTable) AddValues(vs ...interface{}) (err error) {
-	v, err := d.nilToNULL(vs)
+	tv, err := d.nil2NULL(vs)
 	if err != nil {
 		return err
 	}
-	return d.DataTable.AddValues(v...)
+	return d.DataTable.AddValues(tv...)
 }
 func (d *DataTable) SetValues(rowIndex int, values ...interface{}) (err error) {
-	vs, err := d.nilToNULL(values)
+	tv, err := d.nil2NULL(values)
 	if err != nil {
 		return err
 	}
-	return d.DataTable.SetValues(rowIndex, vs...)
+	return d.DataTable.SetValues(rowIndex, tv...)
 }
 func (d *DataTable) GetValues(rowIndex int) []interface{} {
-	return nullToNil(d.DataTable.GetValues(rowIndex)...)
+	if rev, err := d.null2Nil(d.DataTable.GetValues(rowIndex)); err != nil {
+		panic(err)
+	} else {
+		return rev
+	}
 }
 func (d *DataTable) AddColumn(col *DataColumn) *DataColumn {
 
 	d.DataTable.AddColumn(col.DataColumn)
 	d.Columns = append(d.Columns, col)
 	return col
+}
+func (d *DataTable) nil2NULL(values []interface{}) ([]interface{}, error) {
+	rev := make([]interface{}, len(values))
+	for colIdx, col := range d.Columns {
+		tv, err := col.Nil2NULL(values[colIdx])
+		if err != nil {
+			return nil, err
+		}
+		rev[colIdx] = tv
+	}
+	return rev, nil
+}
+func (d *DataTable) null2Nil(values []interface{}) ([]interface{}, error) {
+	rev := make([]interface{}, len(values))
+	for colIdx, col := range d.Columns {
+		tv, err := col.Null2Nil(values[colIdx])
+		if err != nil {
+			return nil, err
+		}
+		rev[colIdx] = tv
+	}
+	return rev, nil
 }
