@@ -168,12 +168,20 @@ func (p *PGHelper) QueryBatch(callBack func(rows *sql.Rows) error, strSql string
 	return
 }
 
-func (p *PGHelper) GetString(strSQL string, params ...interface{}) string {
-	v := sql.NullString{}
-	if err := p.QueryOne(strSQL, append(params, &v)...); err != nil {
+func (p *PGHelper) GetSafeString(strSQL string, params ...interface{}) string {
+	v, err := p.GetString(strSQL, params...)
+	if err != nil {
 		return ""
 	} else {
-		return v.String
+		return v
+	}
+}
+func (p *PGHelper) GetString(strSQL string, params ...interface{}) (string, error) {
+	v := sql.NullString{}
+	if err := p.QueryOne(strSQL, append(params, &v)...); err != nil {
+		return "", err
+	} else {
+		return v.String, nil
 	}
 }
 func (p *PGHelper) GetInt(strSQL string, params ...interface{}) int {
@@ -196,7 +204,7 @@ func (p *PGHelper) GetBool(strSQL string, params ...interface{}) bool {
 	}
 }
 func (p *PGHelper) getTableDesc(tname string) PGDesc {
-	str := p.GetString(SQL_GetTableDesc, tname)
+	str := p.GetSafeString(SQL_GetTableDesc, tname)
 	rev := PGDesc{}
 	if str == "" {
 		return rev

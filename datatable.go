@@ -41,6 +41,9 @@ func (p PGDesc) String() string {
 	return string(buf)
 }
 func (p PGDesc) Parse(str string) {
+	if str == "" {
+		return
+	}
 	err := json.Unmarshal([]byte(str), &p)
 	if err != nil {
 		panic(err)
