@@ -326,6 +326,13 @@ func (p *PGHelper) alterColumnDesc(tname, cname string, desc PGDesc) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnDesc, tname, cname, pqSignStr(desc.String())))
 }
 func (p *PGHelper) dropConstraint(tname, cname string) error {
+	if tname == "" {
+		return fmt.Errorf("the tablename is empty,at dropConstraint")
+	}
+	if cname == "" {
+		return fmt.Errorf("the constraint name is emtpy,at dropConstraint")
+	}
+
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropConstraint, tname, cname))
 }
 func (p *PGHelper) createColumn(tname, cname string, dt *PGType, def string) error {
@@ -391,6 +398,7 @@ func (p *PGHelper) UpdateStruct(oldStruct, newStruct *DataTable) error {
 		}
 		oldStruct = NewDataTable(tablename)
 	}
+
 	//首先判断主关键字是否有变化
 	bKeyChange := false
 	if !reflect.DeepEqual(oldStruct.PK, newStruct.PK) {
