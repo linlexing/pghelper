@@ -89,18 +89,21 @@ func RunAtTrans(dburl string, txFunc func(help *PGHelper) error) (result_err err
 	return txFunc(help)
 }
 
-func (p *PGHelper) Schema() (*PGSchema, error) {
+func (p *PGHelper) CreateSchema(name, pwd string) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_CreateSchema, name, PGSignStr(pwd), name, name))
+}
+func (p *PGHelper) DropSchema(name string) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_DropSchema, name, name))
+}
+func (p *PGHelper) Schema() (string, error) {
 	//获取当前用户默认的schema信息
-	if tab, err := p.GetDataTable(SQL_GetCurrentSchemaAndDesc); err != nil {
-		return nil, err
+	name := ""
+	desc := ""
+	if err := p.QueryRow(SQL_GetCurrentSchemaAndDesc, nil, &name, &desc); err != nil {
+		return "", err
 	} else {
-		schema := &PGSchema{
-			Name: tab.GetValue(0, 0).(string),
-			Desc: &PGSchemaDesc{}}
-		json.Unmarshal([]byte(tab.GetValues(0)[1].(string)), schema.Desc)
-		return schema, nil
+		return name, nil
 	}
-
 }
 
 func (p *PGHelper) DbUrl() string {
@@ -149,6 +152,9 @@ func (p *PGHelper) Query(callBack func(rows *sql.Rows) error, strSql string, par
 		result_err = internalQueryTx(p.tx, callBack, strSql, params...)
 	}
 	return
+}
+func (p PGHelper) DropTable(tableName string) error {
+	return p.ExecuteSql(fmt.Sprintf(SQL_DropTable, tableName))
 }
 func (p *PGHelper) QueryBatch(callBack func(rows *sql.Rows) error, strSql string, params ...[]interface{}) (result_err error) {
 	defer func() {
@@ -215,7 +221,7 @@ func (p *PGHelper) getTableDesc(tname string) PGDesc {
 }
 func (p *PGHelper) alterTableDesc(tname string, desc PGDesc) error {
 
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterTableDesc, tname, pqSignStr(desc.String())))
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterTableDesc, tname, PGSignStr(desc.String())))
 }
 func (p *PGHelper) TableExists(tablename string) bool {
 	b := p.GetBool(SQL_TableExists, tablename)
@@ -323,7 +329,7 @@ func (p *PGHelper) GetDataTableBatch(strSql string, params ...[]interface{}) (ta
 	return
 }
 func (p *PGHelper) alterColumnDesc(tname, cname string, desc PGDesc) error {
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnDesc, tname, cname, pqSignStr(desc.String())))
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterColumnDesc, tname, cname, PGSignStr(desc.String())))
 }
 func (p *PGHelper) dropConstraint(tname, cname string) error {
 	if tname == "" {
@@ -349,7 +355,7 @@ func (p *PGHelper) createTempTable(tname string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreateTempTable, tname))
 }
 func (p *PGHelper) alterIndexDesc(name string, desc PGDesc) error {
-	return p.ExecuteSql(fmt.Sprintf(SQL_AlterIndexDesc, name, pqSignStr(desc.String())))
+	return p.ExecuteSql(fmt.Sprintf(SQL_AlterIndexDesc, name, PGSignStr(desc.String())))
 }
 func (p *PGHelper) createPrimaryKey(tname string, cname []string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_CreatePrimaryKey, tname, strings.Join(cname, ",")))

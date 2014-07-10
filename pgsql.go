@@ -72,4 +72,7 @@ const (
 	SQL_AlterTableDesc    = "COMMENT ON TABLE %v IS %s"
 	SQL_AlterIndexDesc    = "COMMENT ON INDEX %v IS %s"
 	SQL_AlterSchemaDesc   = "COMMENT ON SCHEMA %v IS %s"
+	SQL_DropTable         = "DROP TABLE %s"
+	SQL_CreateSchema      = "CREATE ROLE %s LOGIN PASSWORD %s NOSUPERUSER INHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;CREATE SCHEMA %s AUTHORIZATION %s;"
+	SQL_DropSchema        = "DROP SCHEMA %s;DROP ROLE %s;"
 )

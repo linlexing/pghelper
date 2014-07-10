@@ -424,7 +424,7 @@ func transact(db *sql.DB, txFunc func(*sql.Tx) error) (err error) {
 	}()
 	return txFunc(tx)
 }
-func pqSignStr(str string) string {
+func PGSignStr(str string) string {
 	result := strings.Replace(strings.Replace(strconv.Quote(str), `\"`, `"`, -1), "'", "''", -1)
 	return "'" + result[1:len(result)-1] + "'"
 }

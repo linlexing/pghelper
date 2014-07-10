@@ -156,3 +156,13 @@ func TestMarshalerJson(t *testing.T) {
 	}
 	fmt.Print(string(buf))
 }
+func TestSchema(t *testing.T) {
+	dburl := "host=localhost database=postgres user=admin password=llx123 sslmode=disable"
+	ahelp := NewPGHelper(dburl)
+	if err := ahelp.CreateSchema("test_schema", "myadf!##"); err != nil {
+		t.Error(err)
+	}
+	if err := ahelp.DropSchema("test_schema"); err != nil {
+		t.Error(err)
+	}
+}
