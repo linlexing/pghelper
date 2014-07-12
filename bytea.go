@@ -23,7 +23,7 @@ func (b *Bytea) Scan(value interface{}) error {
 	}
 }
 func (b Bytea) Value() (driver.Value, error) {
-	return b, nil
+	return []byte(b), nil
 }
 
 type NullBytea struct {

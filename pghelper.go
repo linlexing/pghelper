@@ -141,6 +141,7 @@ func (p *PGHelper) QueryRow(strSql string, params []interface{}, dest ...interfa
 
 }
 func (p *PGHelper) Query(callBack func(rows *sql.Rows) error, strSql string, params ...interface{}) (result_err error) {
+	//log.Printf("query sql:%s,params:%v\n", strSql, params)
 	defer func() {
 		if result_err != nil {
 			result_err = NewSqlError(strSql, result_err, params...)
@@ -157,6 +158,7 @@ func (p PGHelper) DropTable(tableName string) error {
 	return p.ExecuteSql(fmt.Sprintf(SQL_DropTable, tableName))
 }
 func (p *PGHelper) QueryBatch(callBack func(rows *sql.Rows) error, strSql string, params ...[]interface{}) (result_err error) {
+	//log.Printf("batch query sql:%s,params:%v\n", strSql, params)
 	defer func() {
 		if result_err != nil {
 			ps := make([]interface{}, len(params))
@@ -279,6 +281,7 @@ func (p *PGHelper) Table(tablename string) (*DBTable, error) {
 }
 
 func (p *PGHelper) ExecuteSql(strSql string, params ...interface{}) (result_err error) {
+	//log.Printf("execute sql:%s,params:%v\n", strSql, params)
 	if strings.Trim(strSql, " \t\n\r") == "" {
 		return nil
 	}
@@ -295,6 +298,7 @@ func (p *PGHelper) ExecuteSql(strSql string, params ...interface{}) (result_err 
 	return
 }
 func (p *PGHelper) ExecuteBatch(strSql string, params ...[]interface{}) (result_err error) {
+	//log.Printf("execute batch sql:%s,params:%v\n", strSql, params)
 	defer func() {
 		if result_err != nil {
 			ps := make([]interface{}, len(params))
