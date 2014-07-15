@@ -144,7 +144,7 @@ func (d *DataTable) AsTabText(columns ...string) string {
 		result = append(result, strings.Join(d.ColumnNames(), "\t"))
 	}
 	for i := 0; i < d.RowCount(); i++ {
-		r := d.GetRow(i)
+		r := d.Row(i)
 		line := []string{}
 		for j := 0; j < d.ColumnCount(); j++ {
 			c := d.Columns[j]
@@ -210,7 +210,7 @@ func (d *DataTable) NewRow() map[string]interface{} {
 	}
 	return result
 }
-func (d *DataTable) GetRow(rowIndex int) map[string]interface{} {
+func (d *DataTable) Row(rowIndex int) map[string]interface{} {
 	vals := d.GetValues(rowIndex)
 	result := map[string]interface{}{}
 	for i, col := range d.Columns {

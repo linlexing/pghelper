@@ -244,7 +244,7 @@ func (p *PGHelper) Table(tablename string) (*DBTable, error) {
 		return nil, err
 	}
 	for i := 0; i < tMeta.RowCount(); i++ {
-		oneRow := tMeta.GetRow(i)
+		oneRow := tMeta.Row(i)
 		dt := PGType{}
 		if err := dt.SetDBType(oneRow["datatype"].(string)); err != nil {
 			return nil, err
@@ -271,7 +271,7 @@ func (p *PGHelper) Table(tablename string) (*DBTable, error) {
 		return nil, err
 	}
 	for i := 0; i < tIndexes.RowCount(); i++ {
-		oneRow := tIndexes.GetRow(i)
+		oneRow := tIndexes.Row(i)
 		oneIndex := NewIndex(oneRow["define"].(string))
 		oneIndex.Desc.Parse(safeToString(oneRow["desc"]))
 		result.AddIndex(oneRow["indexname"].(string), oneIndex)
