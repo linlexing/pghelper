@@ -3,11 +3,13 @@ package pghelper
 import (
 	"bytes"
 	"fmt"
+	_ "github.com/lib/pq"
 	"github.com/linlexing/datatable.go"
 	"github.com/linlexing/dbhelper"
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 type PgMeta struct {
@@ -16,30 +18,30 @@ type PgMeta struct {
 
 var regVarchar = regexp.MustCompile(`^character varying\((\d+)\)$`)
 
+func init() {
+	dbhelper.RegisterMetaHelper("postgres", NewPgMeta())
+}
 func NewPgMeta() *PgMeta {
 	return &PgMeta{&dbhelper.RootMeta{}}
 }
 func (m *PgMeta) ParamPlaceholder(strSql string, num int) string {
-	if num == 0 {
-		return strSql
-	}
-	pp := make([]interface{}, num)
-	for i := 0; i < num; i++ {
-		pp[i] = fmt.Sprintf("$%d", i)
-	}
-	return fmt.Sprintf(strSql, pp...)
+	return strSql
 }
 
 func (p *PgMeta) TableExists(tablename string) (bool, error) {
-	return p.DBHelper.Exists(fmt.Sprintf(`
+	return p.DBHelper.Exists(`
 	    SELECT 1
 	    FROM information_schema.tables
 	    WHERE
 	      table_schema = current_schema AND
-	      table_name = %s`, tablename))
+	      table_name = $1`, tablename)
 }
-func (p *PgMeta) DropPrimaryKey(tablename, pkConstraintName string) error {
-	_, err := p.DBHelper.Exec(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", tablename, pkConstraintName))
+func (p *PgMeta) DropPrimaryKey(tablename string) error {
+	cname, err := p.getPrimaryKeyConstraintName(tablename)
+	if err != nil {
+		return err
+	}
+	_, err = p.DBHelper.Exec(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", tablename, cname))
 	return err
 }
 func (p *PgMeta) DropIndex(tablename, indexname string) error {
@@ -236,16 +238,24 @@ func (p *PgMeta) AddPrimaryKey(tablename string, pks []string) error {
 	return err
 }
 func (p *PgMeta) GetTableDesc(tablename string) (dbhelper.DBDesc, error) {
-	rev, err := p.DBHelper.QueryOne("select obj_description(%s::regclass,'pg_class')", tablename)
+	rev, err := p.DBHelper.QueryOne("select obj_description($1::regclass,'pg_class')", tablename)
 	if err != nil {
 		return nil, err
 	}
-	if rev == nil || rev.(string) == "" {
+	switch tv := rev.(type) {
+	case nil:
 		return dbhelper.DBDesc{}, nil
-	} else {
+	case string:
 		v := dbhelper.DBDesc{}
-		v.Parse(rev.(string))
+		v.Parse(tv)
 		return v, nil
+	case []byte:
+		v := dbhelper.DBDesc{}
+		v.Parse(string(tv))
+		return v, nil
+	default:
+		panic(fmt.Errorf("the table %q's desc type %T invalid", tablename, rev))
+
 	}
 }
 func (p *PgMeta) GetIndexes(tablename string) ([]*dbhelper.TableIndex, error) {
@@ -266,7 +276,7 @@ func (p *PgMeta) GetIndexes(tablename string) ([]*dbhelper.TableIndex, error) {
 		    and a.attrelid = t.oid
 		    and a.attnum = ANY(ix.indkey)
 		    and t.relkind = 'r'
-		    and t.relname = %s
+		    and t.relname = $1
 			and ix.indisprimary = false
 		group by
 		    t.relname,
@@ -306,7 +316,7 @@ func (p *PgMeta) GetColumns(tablename string) ([]*dbhelper.TableColumn, error) {
 		  pg_catalog.pg_attribute a join
 		  (SELECT  c.oid
 		   FROM    pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-		   WHERE c.relname =%s AND (n.nspname) = current_schema
+		   WHERE c.relname =$1 AND (n.nspname) = current_schema
 		  ) b on a.attrelid = b.oid left join
 		  pg_catalog.pg_attrdef d ON (a.attrelid, a.attnum) = (d.adrelid,  d.adnum)
 		WHERE
@@ -364,13 +374,30 @@ func (p *PgMeta) GetColumns(tablename string) ([]*dbhelper.TableColumn, error) {
 	}
 	return rev, nil
 }
+func (p *PgMeta) getPrimaryKeyConstraintName(tablename string) (string, error) {
+	cname, err := p.DBHelper.QueryOne(`
+		SELECT
+		  idx.relname as indexname
+		FROM pg_index, pg_class, pg_attribute ,pg_class idx
+		WHERE
+		  pg_class.oid = $1::regclass AND
+		  pg_index.indrelid = pg_class.oid AND
+		  pg_attribute.attrelid = pg_class.oid AND
+		  pg_index.indexrelid = idx.oid and
+		  pg_attribute.attnum = any(pg_index.indkey) AND
+		  indisprimary`, tablename)
+	if err != nil {
+		return "", err
+	}
+	return string(cname.([]byte)), nil
+}
 func (p *PgMeta) GetPrimaryKeys(tablename string) ([]string, error) {
 	pks, err := p.DBHelper.QueryOne(`
 		SELECT
 		  array_to_string(array_agg(pg_attribute.attname),',') as columns
 		FROM pg_index, pg_class, pg_attribute ,pg_class idx
 		WHERE
-		  pg_class.oid = %s::regclass AND
+		  pg_class.oid = $1::regclass AND
 		  pg_index.indrelid = pg_class.oid AND
 		  pg_attribute.attrelid = pg_class.oid AND
 		  pg_index.indexrelid = idx.oid and
@@ -379,5 +406,91 @@ func (p *PgMeta) GetPrimaryKeys(tablename string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(pks.(string), ","), nil
+	return strings.Split(string(pks.([]byte)), ","), nil
+}
+func (p *PgMeta) Merge(dest, source string, colNames []string, pkColumns []string, autoRemove bool, sqlWhere string) error {
+	if len(pkColumns) == 0 {
+		return fmt.Errorf("the primary keys is empty")
+	}
+	if len(colNames) == 0 {
+		return fmt.Errorf("the columns is empty")
+	}
+	tmp := template.New("sql")
+	tmp.Funcs(template.FuncMap{
+		"Join": func(value []string, sep, prefix string) string {
+			if prefix == "" {
+				return strings.Join(value, sep)
+			} else {
+				rev := make([]string, len(value))
+				for i, v := range value {
+					rev[i] = prefix + v
+				}
+				return strings.Join(rev, sep)
+			}
+		},
+		"First": func(value []string) string {
+			return value[0]
+		},
+	})
+	tmp, err := tmp.Parse(`
+WITH updated as ({{if gt (len .updateColumns) 0}}
+        UPDATE {{.destTable}} dest SET
+            ({{Join .updateColumns "," ""}}) = ({{Join .updateColumns "," "src."}})
+        FROM {{.sourceTable}} src
+        WHERE {{range $idx,$colName :=.pkColumns}}
+            {{if gt $idx 0}}AND {{end}}dest.{{$colName}}=src.{{$colName}}{{end}}
+        RETURNING {{Join .pkColumns "," "src."}}{{else}}
+        SELECT {{Join .pkColumns "," "src."}} FROM {{.destTable}} dest JOIN {{.sourceTable}} src USING({{Join .pkColumns "," ""}})
+        {{end}}
+    ){{if .autoRemove}},
+    deleted as (
+        DELETE FROM {{.destTable}} dest WHERE{{if ne .sqlWhere ""}}
+            ({{.sqlWhere}}) AND {{end}}
+            NOT EXISTS(
+                SELECT 1 FROM {{.sourceTable}} src WHERE{{range $idx,$colName :=.pkColumns}}
+                    {{if gt $idx 0}}AND {{end}}dest.{{$colName}}=src.{{$colName}}{{end}}
+            )
+    ){{end}}
+INSERT INTO {{.destTable}}(
+    {{Join .colNames ",\n    " ""}}
+)
+SELECT
+    {{Join .colNames ",\n    " "src."}}
+FROM
+    {{.sourceTable}} src LEFT JOIN updated USING({{Join .pkColumns "," ""}})
+WHERE updated.{{First .pkColumns}} IS NULL`)
+	if err != nil {
+		return err
+	}
+	var b bytes.Buffer
+	//primary key not update
+	updateColumns := []string{}
+
+	for _, v := range colNames {
+		bFound := false
+		for _, pv := range pkColumns {
+			if v == pv {
+				bFound = true
+				break
+			}
+		}
+		if !bFound {
+			updateColumns = append(updateColumns, v)
+		}
+	}
+
+	param := map[string]interface{}{
+		"destTable":     dest,
+		"sourceTable":   source,
+		"updateColumns": updateColumns,
+		"colNames":      colNames,
+		"autoRemove":    autoRemove,
+		"sqlWhere":      sqlWhere,
+		"pkColumns":     pkColumns,
+	}
+	if err := tmp.Execute(&b, param); err != nil {
+		return err
+	}
+	_, err = p.DBHelper.Exec(b.String())
+	return err
 }

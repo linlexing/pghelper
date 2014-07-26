@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	dns string = "host=localhost database=postgres user=root password=123456 sslmode=disable"
+	dns    string = "host=localhost database=postgres user=root password=123456 sslmode=disable"
+	driver string = "postgres"
 )
 
 func GetTestTable() *dbhelper.DataTable {
@@ -37,7 +38,7 @@ func GetTestTable1() *dbhelper.DataTable {
 	return rev
 }
 func TestCreateTable(t *testing.T) {
-	ahelper := NewPgHelper(dns)
+	ahelper := dbhelper.NewDBHelper(driver, dns)
 	if err := ahelper.Open(); err != nil {
 		t.Error(err)
 	}
@@ -50,12 +51,84 @@ func TestCreateTable(t *testing.T) {
 	}
 }
 func TestUpdateStruct(t *testing.T) {
-	ahelper := NewPgHelper(dns)
+	ahelper := dbhelper.NewDBHelper(driver, dns)
 	if err := ahelper.Open(); err != nil {
 		t.Error(err)
 	}
 	defer ahelper.Close()
 	if err := ahelper.UpdateStruct(GetTestTable(), GetTestTable1()); err != nil {
+		t.Error(err)
+	}
+}
+func TestMerge(t *testing.T) {
+	ahelper := dbhelper.NewDBHelper(driver, dns)
+	if err := ahelper.Open(); err != nil {
+		t.Error(err)
+	}
+	defer ahelper.Close()
+	if err := ahelper.GoExec(`
+drop table IF EXISTS a
+go
+drop table IF EXISTS b
+go
+create table a(
+	id bigint not null,
+	name varchar(200),
+	style varchar(300),
+	style2 varchar(30),
+	primary key(id)
+)
+go
+create table b(
+	id bigint not null,
+	name varchar(200),
+	style varchar(300),
+	style1 varchar(300),
+	primary key(id)
+)
+go
+
+insert into a(
+	id,
+	name,
+	style,
+	style2
+)values(1,'name1','','test')
+go
+insert into a(
+	id,
+	name,
+	style,
+	style2
+)values(2,'name2','','abc')
+go
+insert into b(
+	id,
+	name,
+	style,
+	style1
+)values
+	(1,'name11','0','a')
+go
+insert into b(
+	id,
+	name,
+	style,
+	style1
+)values
+(3,'name1','1','a')
+go
+insert into b(
+	id,
+	name,
+	style,
+	style1
+)values
+	(4,'name2','2','a')
+	`); err != nil {
+		t.Error(err)
+	}
+	if err := ahelper.Merge("a", "b", []string{"id", "name", "style"}, []string{"id"}, true, "id=2"); err != nil {
 		t.Error(err)
 	}
 }
