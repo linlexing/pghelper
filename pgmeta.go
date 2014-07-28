@@ -24,10 +24,12 @@ func init() {
 func NewPgMeta() *PgMeta {
 	return &PgMeta{&dbhelper.RootMeta{}}
 }
-func (m *PgMeta) ParamPlaceholder(strSql string, num int) string {
-	return strSql
+func (m *PgMeta) ParamPlaceholder(num int) string {
+	return "$" + strconv.Itoa(num)
 }
-
+func (m *PgMeta) RegLike(value, strRegLike string) string {
+	return value + " ~ " + strRegLike
+}
 func (p *PgMeta) TableExists(tablename string) (bool, error) {
 	return p.DBHelper.Exists(`
 	    SELECT 1
