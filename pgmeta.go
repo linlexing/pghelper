@@ -368,7 +368,7 @@ func (p *PgMeta) GetColumns(tablename string) ([]*dbhelper.TableColumn, error) {
 		} else {
 			rev[i].NotNull = false
 		}
-		if row["column_desc"] != nil || row["column_desc"].(string) != "" {
+		if row["column_desc"] != nil && row["column_desc"].(string) != "" {
 			desc := dbhelper.DBDesc{}
 			desc.Parse(row["column_desc"].(string))
 			rev[i].Desc = desc
