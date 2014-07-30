@@ -110,7 +110,7 @@ func getDefault(t datatable.ColumnType) string {
 	case datatable.Int64, datatable.Float64:
 		return "0"
 	case datatable.Time:
-		return "'allballs'::time"
+		return "'epoch'::timestamp"
 	}
 	return "NULL"
 
@@ -435,16 +435,21 @@ func (p *PgMeta) Merge(dest, source string, colNames []string, pkColumns []strin
 		},
 	})
 	tmp, err := tmp.Parse(`
-WITH updated as ({{if gt (len .updateColumns) 0}}
+WITH updated as (
+	{{if gt (len .updateColumns) 0}}
         UPDATE {{.destTable}} dest SET
             ({{Join .updateColumns "," ""}}) = ({{Join .updateColumns "," "src."}})
         FROM {{.sourceTable}} src
-        WHERE {{range $idx,$colName :=.pkColumns}}
-            {{if gt $idx 0}}AND {{end}}dest.{{$colName}}=src.{{$colName}}{{end}}
-        RETURNING {{Join .pkColumns "," "src."}}{{else}}
+        WHERE
+		{{range $idx,$colName :=.pkColumns}}
+            {{if gt $idx 0}}AND {{end}}dest.{{$colName}}=src.{{$colName}}
+		{{end}}
+        RETURNING {{Join .pkColumns "," "src."}}
+	{{else}}
         SELECT {{Join .pkColumns "," "src."}} FROM {{.destTable}} dest JOIN {{.sourceTable}} src USING({{Join .pkColumns "," ""}})
-        {{end}}
-    ){{if .autoRemove}},
+	{{end}}
+    )
+	{{if .autoRemove}},
     deleted as (
         DELETE FROM {{.destTable}} dest WHERE{{if ne .sqlWhere ""}}
             ({{.sqlWhere}}) AND {{end}}
@@ -452,7 +457,8 @@ WITH updated as ({{if gt (len .updateColumns) 0}}
                 SELECT 1 FROM {{.sourceTable}} src WHERE{{range $idx,$colName :=.pkColumns}}
                     {{if gt $idx 0}}AND {{end}}dest.{{$colName}}=src.{{$colName}}{{end}}
             )
-    ){{end}}
+    )
+	{{end}}
 INSERT INTO {{.destTable}}(
     {{Join .colNames ",\n    " ""}}
 )
@@ -495,4 +501,7 @@ WHERE updated.{{First .pkColumns}} IS NULL`)
 	}
 	_, err = p.DBHelper.Exec(b.String())
 	return err
+}
+func (p *PgMeta) StringCat(values ...string) string {
+	return strings.Join(values, "||")
 }
