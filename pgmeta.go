@@ -410,7 +410,7 @@ func (p *PgMeta) GetPrimaryKeys(tablename string) ([]string, error) {
 	}
 	return strings.Split(string(pks.([]byte)), ","), nil
 }
-func (p *PgMeta) Merge(dest, source string, colNames []string, pkColumns []string, autoRemove bool, sqlWhere string) error {
+func (p *PgMeta) Merge(dest, source string, colNames []string, pkColumns []string, autoUpdate, autoRemove bool, sqlWhere string) error {
 	if len(pkColumns) == 0 {
 		return fmt.Errorf("the primary keys is empty")
 	}
@@ -436,7 +436,7 @@ func (p *PgMeta) Merge(dest, source string, colNames []string, pkColumns []strin
 	})
 	tmp, err := tmp.Parse(`
 WITH updated as (
-	{{if gt (len .updateColumns) 0}}
+	{{if (and .autoUpdate (gt (len .updateColumns) 0))}}
         UPDATE {{.destTable}} dest SET
             ({{Join .updateColumns "," ""}}) = ({{Join .updateColumns "," "src."}})
         FROM {{.sourceTable}} src
@@ -492,6 +492,7 @@ WHERE updated.{{First .pkColumns}} IS NULL`)
 		"sourceTable":   source,
 		"updateColumns": updateColumns,
 		"colNames":      colNames,
+		"autoUpdate":    autoUpdate,
 		"autoRemove":    autoRemove,
 		"sqlWhere":      sqlWhere,
 		"pkColumns":     pkColumns,
